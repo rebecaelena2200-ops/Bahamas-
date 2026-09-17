@@ -181,6 +181,7 @@ td{color:#ddd} tr:last-child td{border-bottom:0}
     </div>
     <div id="workers" class="grid"></div>
 
+    <div id="cloudStatus" class="notice" style="margin-top:18px">La plantilla todavía no está compartida. Hay que conectar Firebase para que todos vean los mismos empleados.</div>
     <div id="employeeManagement" style="margin-top:28px"></div>
     <div id="managerAccess" class="card" style="margin-top:28px">
       <h3>Gestión de empleados</h3>
@@ -341,7 +342,21 @@ td{color:#ddd} tr:last-child td{border-bottom:0}
 
 <footer class="footer">BAHAMAS · Panel de gestión</footer>
 
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
 <script>
+// Pega aquí los datos de tu proyecto Firebase (Realtime Database).
+// Hasta que no estén puestos, cada persona seguirá viendo solo sus empleados.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDFbepmlolvKyZLLxUfqM5kczUko1NP2zk",
+  authDomain: "bahamas-2ee8c.firebaseapp.com",
+  databaseURL: "https://bahamas-2ee8c-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "bahamas-2ee8c",
+  storageBucket: "bahamas-2ee8c.firebasestorage.app",
+  messagingSenderId: "17808059860",
+  appId: "1:17808059860:web:05af1a8bf0b5293b6f3a41"
+};
+
 const defaultWorkers = [
   {id:1,name:"Alexandra Miller",role:"Jefa"},
   {id:2,name:"Eduard Graham",role:"Encargado"}
@@ -466,8 +481,7 @@ function eliminarEmpleado(id){
   }
 
   workHistory = workHistory.filter(x => x.worker !== nombre);
-  save("bahamas_workers", workers);
-  save("bahamas_employee_pins", employeePins);
+  persistPlantilla();
   save("bahamas_work_history", workHistory);
 
   renderWorkers();
@@ -512,9 +526,7 @@ function addEmployee(e){
   });
 
   employeePins[name] = pin;
-
-  localStorage.setItem("bahamas_workers", JSON.stringify(workers));
-  localStorage.setItem("bahamas_employee_pins", JSON.stringify(employeePins));
+  persistPlantilla();
 
   document.getElementById("employeeName").value = "";
   document.getElementById("employeePin").value = "";
@@ -544,15 +556,14 @@ function editEmployeeName(id,value){
     employeePins[newName] = oldPin;
     delete employeePins[oldName];
   }
-  save("bahamas_workers", workers);
-  saveEmployeePins();
+  persistPlantilla();
   renderEmployeeTable();
   renderWorkers();
 }
 function editEmployeeRole(id,value){
   if(!canManage()){alert("Solo los jefes y encargados pueden editar empleados.");renderEmployeeManagement();return}
   const w=workers.find(x=>x.id===id);if(!w)return;
-  w.role=value.trim()||"Empleado";save("bahamas_workers",workers);renderWorkers();
+  w.role=value.trim()||"Empleado";persistPlantilla();renderWorkers();
 }
 function editEmployeePin(id,value){
   if(!canManage()){alert("Solo los jefes y encargados pueden editar empleados.");renderEmployeeManagement();return}
@@ -562,6 +573,7 @@ function editEmployeePin(id,value){
   const duplicate=Object.entries(employeePins).some(([name,p])=>name!==w.name&&p===pin);
   if(duplicate){alert("Ese PIN ya está utilizado.");renderEmployeeManagement();return}
   employeePins[w.name]=pin;
+  persistPlantilla();
 }
 const defaultProducts = [
   {id:1,name:"Producto 1",price:50},
@@ -595,6 +607,90 @@ function load(key, fallback){
   }catch(e){return fallback}
 }
 function save(key,val){localStorage.setItem(key,JSON.stringify(val))}
+function persistPlantilla(){
+  save("bahamas_workers", workers);
+  save("bahamas_employee_pins", employeePins);
+  syncPlantillaToCloud();
+}
+function setCloudStatus(text){
+  const el=document.getElementById("cloudStatus");
+  if(el) el.textContent=text;
+}
+function firebaseListo(){
+  return FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey.indexOf("PEGAR")===-1 &&
+    FIREBASE_CONFIG.databaseURL && FIREBASE_CONFIG.databaseURL.indexOf("PEGAR")===-1;
+}
+function normalizarTrabajadores(lista){
+  if(Array.isArray(lista)) return lista.filter(Boolean);
+  if(lista && typeof lista==="object") return Object.values(lista);
+  return [];
+}
+let plantillaRef=null;
+let cloudReady=false;
+let ignoreCloudWrite=false;
+function aplicarPlantillaNube(data){
+  const lista=normalizarTrabajadores(data && data.workers);
+  if(!lista.length) return;
+  workers=lista;
+  if(data.pins && typeof data.pins==="object") employeePins=data.pins;
+  save("bahamas_workers", workers);
+  save("bahamas_employee_pins", employeePins);
+  renderWorkers();
+  if(typeof renderEmployeeManagement==="function") renderEmployeeManagement();
+  if(typeof renderHoursBoard==="function") renderHoursBoard();
+  if(typeof renderServiceCards==="function") renderServiceCards();
+}
+function syncPlantillaToCloud(){
+  if(!plantillaRef || !cloudReady) return;
+  ignoreCloudWrite=true;
+  plantillaRef.set({
+    workers: workers,
+    pins: employeePins,
+    updatedAt: Date.now()
+  }).finally(function(){
+    setTimeout(function(){ ignoreCloudWrite=false; }, 500);
+  });
+}
+function iniciarPlantillaNube(){
+  if(!firebaseListo()){
+    setCloudStatus("La plantilla todavía no está compartida. Hay que conectar Firebase para que todos vean los mismos empleados.");
+    return;
+  }
+  if(typeof firebase==="undefined"){
+    setCloudStatus("No se ha podido cargar Firebase. Revisa la conexión a internet.");
+    return;
+  }
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+    plantillaRef=firebase.database().ref("bahamas/plantilla");
+  }catch(err){
+    setCloudStatus("Firebase no se ha podido conectar. Revisa apiKey y databaseURL.");
+    return;
+  }
+  setCloudStatus("Conectando la plantilla compartida…");
+  plantillaRef.once("value").then(function(snap){
+    const data=snap.val();
+    const lista=normalizarTrabajadores(data && data.workers);
+    if(lista.length){
+      aplicarPlantillaNube(data);
+    }else{
+      plantillaRef.set({
+        workers: workers,
+        pins: employeePins,
+        updatedAt: Date.now()
+      });
+    }
+    cloudReady=true;
+    setCloudStatus("Plantilla compartida activa. Si añades o eliminas a alguien, el resto lo verá en unos segundos.");
+    plantillaRef.on("value", function(next){
+      if(ignoreCloudWrite) return;
+      const remote=next.val();
+      if(remote && remote.workers) aplicarPlantillaNube(remote);
+    });
+  }).catch(function(){
+    setCloudStatus("No se ha podido leer la base de datos. En Firebase, crea Realtime Database en modo prueba.");
+  });
+}
 function money(n){return Number(n).toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2})+" €"}
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 function initials(name){return name.split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}
@@ -1321,6 +1417,7 @@ if(activeWorker && workers.some(w=>w.name===activeWorker)){
   sessionStorage.removeItem("bahamas_active_worker");
 }
 renderAll();
+iniciarPlantillaNube();
 
 document.getElementById("loginPin").addEventListener("keydown",e=>{
   if(e.key==="Enter")confirmLogin();
