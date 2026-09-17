@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bahamas | Los Santos del Asfalto</title>
+<style>
+:root{--bg:#080909;--card:#121411;--card2:#171914;--gold:#d6b85a;--muted:#a9aaa5;--line:#292c25;--green:#86b86a;--red:#c96b6b}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:#eee;line-height:1.5}
+nav{position:sticky;top:0;z-index:50;background:rgba(8,9,9,.96);border-bottom:1px solid var(--line);display:flex;justify-content:center;gap:8px;flex-wrap:wrap;padding:12px}
+nav a{color:#ddd;text-decoration:none;padding:9px 13px;border-radius:6px;font-size:12px;letter-spacing:.5px}
+nav a:hover{background:#20221d;color:var(--gold)}
+.hero{min-height:58vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:70px 20px;background:radial-gradient(circle at center,#292716 0,#11120f 35%,#080909 75%)}
+.logo{font-size:clamp(42px,8vw,82px);letter-spacing:12px;color:var(--gold);font-weight:800}
+.subtitle{margin-top:8px;color:#aaa;letter-spacing:5px}
+.line{width:90px;height:2px;background:var(--gold);margin:25px auto}
+.hero p{max-width:720px;color:#bbb}
+section{max-width:1180px;margin:auto;padding:75px 22px}
+section.full{max-width:none;background:#0e100e}
+h2{text-align:center;color:var(--gold);letter-spacing:4px;margin-bottom:35px;font-size:26px}
+.section-intro{text-align:center;color:var(--muted);max-width:800px;margin:0 auto 28px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:24px}
+.card:hover{border-color:#8e7a3d}
+.avatar{width:58px;height:58px;border:1px solid var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--gold);font-weight:bold;margin-bottom:14px}
+.role{font-size:12px;color:var(--gold)}
+.small{font-size:13px;color:var(--muted)}
+.price{font-size:25px;color:var(--gold);font-weight:bold;margin:8px 0}
+button,.btn{border:0;border-radius:6px;background:var(--gold);color:#111;padding:10px 15px;font-weight:bold;cursor:pointer}
+button.secondary{background:#272a25;color:#eee}
+button.danger{background:var(--red);color:white}
+button:hover{filter:brightness(1.08)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+label{display:block;color:#bbb;font-size:12px;margin-bottom:5px}
+input,select{width:100%;background:#0d0f0d;color:#eee;border:1px solid var(--line);border-radius:6px;padding:11px}
+table{width:100%;border-collapse:collapse;margin-top:15px}
+th,td{text-align:left;padding:12px;border-bottom:1px solid var(--line);font-size:13px}
+th{color:var(--gold)}
+.badge{display:inline-block;padding:4px 8px;border-radius:20px;background:#25271f;color:var(--gold);font-size:11px}
+.total{font-size:19px;color:var(--gold);font-weight:bold}
+.notice{padding:14px;background:#191b17;border:1px solid var(--line);border-radius:8px;color:#bbb;margin:15px 0}
+.hidden{display:none}
+footer{text-align:center;padding:35px;border-top:1px solid var(--line);color:#666}
+@media(max-width:650px){nav{justify-content:flex-start}.logo{letter-spacing:7px}.table-wrap{overflow-x:auto}}
+</style>
+</head>
+<body>
+
+<nav>
+<a href="#inicio">INICIO</a><a href="#miembros">MIEMBROS</a><a href="#convenios">CONVENIOS</a>
+<a href="#productos">VENTA</a><a href="#packs">PACKS</a><a href="#fichaje">FICHAJE</a>
+<a href="#historia">HISTORIA</a>
+</nav>
+
+<header class="hero" id="inicio">
+<div>
+<div class="logo">BAHAMAS</div>
+<div class="subtitle">NIGHT CLUB & LOUNGE</div>
+<div class="line"></div>
+<p>El punto de encuentro de Los Santos del Asfalto. Negocio, eventos y nuevas historias en la ciudad.</p>
+</div>
+</header>
+
+<section id="miembros">
+<h2>NUESTRO EQUIPO</h2>
+<div class="grid" id="members"></div>
+</section>
+
+<section class="full" id="convenios">
+<div style="max-width:1180px;margin:auto">
+<h2>CONVENIOS</h2>
+<p class="section-intro">Añade, modifica o elimina convenios. Los datos se guardan en este navegador.</p>
+<div class="card">
+<div class="form">
+<div><label>Empresa / persona</label><input id="convName" placeholder="Ej. Taller XYZ"></div>
+<div><label>Descuento (%)</label><input id="convDiscount" type="number" min="0" max="100" value="5"></div>
+<div><label>Descripción</label><input id="convDesc" placeholder="Convenio para clientes"></div>
+</div>
+<div class="actions"><button onclick="addConvention()">Añadir convenio</button></div>
+<div id="conventions" class="grid" style="margin-top:20px"></div>
+</div>
+</div>
+</section>
+
+<section id="productos">
+<h2>PRODUCTOS Y PRECIOS</h2>
+<p class="section-intro">Aquí puedes actualizar lo que vende Bahamas y sus precios.</p>
+<div class="card">
+<div class="form">
+<div><label>Producto</label><input id="prodName" placeholder="Ej. Botella"></div>
+<div><label>Precio ($)</label><input id="prodPrice" type="number" min="0" step="0.01"></div>
+</div>
+<div class="actions"><button onclick="addProduct()">Añadir producto</button></div>
+</div>
+<div id="products" class="grid" style="margin-top:20px"></div>
+</section>
+
+<section class="full" id="packs">
+<div style="max-width:1180px;margin:auto">
+<h2>PACKS PARA CLIENTES</h2>
+<p class="section-intro">Selecciona un pack y un convenio para calcular automáticamente el descuento.</p>
+<div class="grid">
+<div class="card">
+<h3>Pack 3 × 3</h3>
+<div class="price">$200</div>
+<p class="small">Precio normal del pack.</p>
+<div style="margin-top:16px"><label>Convenio</label><select id="packConvention" onchange="calcPack()"><option value="0">Sin convenio</option></select></div>
+<div class="notice">
+Precio original: <b id="packOriginal">$200.00</b><br>
+Descuento: <b id="packDiscount">$0.00</b><br>
+<span class="total">Total: <span id="packTotal">$200.00</span></span>
+</div>
+</div>
+<div class="card">
+<h3>Crear / editar packs</h3>
+<p class="small">Puedes añadir otros packs con su precio y número de unidades.</p>
+<div class="form" style="margin-top:15px">
+<div><label>Nombre</label><input id="packName" placeholder="Pack 5 × 5"></div>
+<div><label>Precio ($)</label><input id="packPrice" type="number" min="0" step="0.01"></div>
+</div>
+<div class="actions"><button onclick="addPack()">Añadir pack</button></div>
+<div id="packList" style="margin-top:15px"></div>
+</div>
+</div>
+</div>
+</section>
+
+<section id="fichaje">
+<h2>FICHAJE DE PERSONAL</h2>
+<p class="section-intro">Cada trabajador puede registrar entrada y salida. El historial se guarda en este navegador.</p>
+<div class="card">
+<div class="form">
+<div><label>Trabajador</label><select id="employeeSelect"></select></div>
+</div>
+<div class="actions">
+<button onclick="clockIn()">Fichar entrada</button>
+<button class="secondary" onclick="clockOut()">Fichar salida</button>
+</div>
+<div id="clockStatus" class="notice"></div>
+</div>
+<div class="card" style="margin-top:20px">
+<h3>Historial de fichajes</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Trabajador</th><th>Entrada</th><th>Salida</th><th>Horas</th></tr></thead>
+<tbody id="timeRows"></tbody>
+</table>
+</div>
+</div>
+</section>
+
+<section id="historia">
+<h2>NUESTRA HISTORIA</h2>
+<p class="section-intro">
+Eduard y David Graham llegaron a Los Santos buscando una nueva oportunidad. Junto a Alexandra, Alejandra, Juan, Alex, Conge y Alonso construyeron Los Santos del Asfalto.
+Bahamas es su punto de encuentro y el lugar desde donde continúa su historia.
+</p>
+</section>
+
+<footer>© 2026 Bahamas · Los Santos del Asfalto</footer>
+
+<script>
+const members=[
+["Eduard Graham","PROPIETARIO · LÍDER","EG"],
+["David Graham","GERENTE · SEGUNDO AL MANDO","DG"],
+["Alexandra Miller","MANO DERECHA","AM"],
+["Alejandra","RELACIONES","A"],
+["Juan","OPERACIONES","J"],
+["Alex","MIEMBRO","A"],
+["Conge","SEGURIDAD","C"],
+["Alonso","LOGÍSTICA","A"]
+];
+
+let conventions=JSON.parse(localStorage.getItem("bahamas_conventions")||"[]");
+let products=JSON.parse(localStorage.getItem("bahamas_products")||"[]");
+let packs=JSON.parse(localStorage.getItem("bahamas_packs")||"[]");
+let fichajes=JSON.parse(localStorage.getItem("bahamas_fichajes")||"[]");
+
+function save(){
+ localStorage.setItem("bahamas_conventions",JSON.stringify(conventions));
+ localStorage.setItem("bahamas_products",JSON.stringify(products));
+ localStorage.setItem("bahamas_packs",JSON.stringify(packs));
+ localStorage.setItem("bahamas_fichajes",JSON.stringify(fichajes));
+}
+
+function renderMembers(){
+ document.getElementById("members").innerHTML=members.map(m=>`<div class="card"><div class="avatar">${m[2]}</div><h3>${m[0]}</h3><div class="role">${m[1]}</div></div>`).join("");
+ const s=document.getElementById("employeeSelect");
+ s.innerHTML=members.map(m=>`<option>${m[0]}</option>`).join("");
+}
+function addConvention(){
+ const name=document.getElementById("convName").value.trim(), discount=Number(document.getElementById("convDiscount").value), desc=document.getElementById("convDesc").value.trim();
+ if(!name)return alert("Escribe el nombre del convenio.");
+ conventions.push({name,discount,desc}); save(); renderConventions(); fillConventionSelect();
+ document.getElementById("convName").value="";document.getElementById("convDesc").value="";
+}
+function deleteConvention(i){conventions.splice(i,1);save();renderConventions();fillConventionSelect();}
+function renderConventions(){
+ document.getElementById("conventions").innerHTML=conventions.length?conventions.map((c,i)=>`<div class="card"><h3>${esc(c.name)}</h3><div class="price">${c.discount}%</div><p class="small">${esc(c.desc||"Convenio activo")}</p><div class="actions"><button class="danger" onclick="deleteConvention(${i})">Eliminar</button></div></div>`).join(""):`<div class="notice">Todavía no hay convenios.</div>`;
+}
+function fillConventionSelect(){
+ const s=document.getElementById("packConvention");
+ s.innerHTML='<option value="0">Sin convenio</option>'+conventions.map((c,i)=>`<option value="${i}">${esc(c.name)} — ${c.discount}%</option>`).join("");
+ calcPack();
+}
+function addProduct(){
+ const name=document.getElementById("prodName").value.trim(), price=Number(document.getElementById("prodPrice").value);
+ if(!name||price<0)return alert("Introduce producto y precio.");
+ products.push({name,price});save();renderProducts();
+ document.getElementById("prodName").value="";document.getElementById("prodPrice").value="";
+}
+function deleteProduct(i){products.splice(i,1);save();renderProducts();}
+function renderProducts(){
+ document.getElementById("products").innerHTML=products.length?products.map((p,i)=>`<div class="card"><h3>${esc(p.name)}</h3><div class="price">$${Number(p.price).toFixed(2)}</div><button class="danger" onclick="deleteProduct(${i})">Eliminar</button></div>`).join(""):`<div class="notice">Añade tus productos y precios desde el formulario.</div>`;
+}
+function calcPack(){
+ const idx=Number(document.getElementById("packConvention").value);
+ const discount=idx>0&&conventions[idx-1]?Number(conventions[idx-1].discount):0;
+ const original=200, amount=original*discount/100;
+ document.getElementById("packOriginal").textContent="$"+original.toFixed(2);
+ document.getElementById("packDiscount").textContent="-$"+amount.toFixed(2)+" ("+discount+"%)";
+ document.getElementById("packTotal").textContent="$"+(original-amount).toFixed(2);
+}
+function addPack(){
+ const name=document.getElementById("packName").value.trim(), price=Number(document.getElementById("packPrice").value);
+ if(!name||price<0)return alert("Introduce nombre y precio.");
+ packs.push({name,price});save();renderPacks();
+ document.getElementById("packName").value="";document.getElementById("packPrice").value="";
+}
+function deletePack(i){packs.splice(i,1);save();renderPacks();}
+function renderPacks(){
+ document.getElementById("packList").innerHTML=packs.map((p,i)=>`<div class="notice"><b>${esc(p.name)}</b> — $${Number(p.price).toFixed(2)} <button class="danger" style="float:right" onclick="deletePack(${i})">Eliminar</button></div>`).join("");
+}
+function clockIn(){
+ const name=document.getElementById("employeeSelect").value;
+ const open=fichajes.find(x=>x.name===name&&!x.out);
+ if(open)return alert(name+" ya tiene un fichaje abierto.");
+ fichajes.unshift({name,in:new Date().toISOString(),out:null});save();renderTimes();status();
+}
+function clockOut(){
+ const name=document.getElementById("employeeSelect").value;
+ const open=fichajes.find(x=>x.name===name&&!x.out);
+ if(!open)return alert(name+" no tiene una entrada abierta.");
+ open.out=new Date().toISOString();save();renderTimes();status();
+}
+function status(){
+ const name=document.getElementById("employeeSelect").value, open=fichajes.find(x=>x.name===name&&!x.out);
+ document.getElementById("clockStatus").innerHTML=open?`<span class="badge">EN SERVICIO</span> Entrada: <b>${formatDate(open.in)}</b>`:`<span class="badge">FUERA DE SERVICIO</span> No hay un fichaje abierto para ${esc(name)}.`;
+}
+function renderTimes(){
+ document.getElementById("timeRows").innerHTML=fichajes.length?fichajes.map(x=>`<tr><td>${esc(x.name)}</td><td>${formatDate(x.in)}</td><td>${x.out?formatDate(x.out):'<span class="badge">En servicio</span>'}</td><td>${hours(x.in,x.out)}</td></tr>`).join(""):`<tr><td colspan="4" class="small">No hay fichajes todavía.</td></tr>`;
+}
+function hours(a,b){
+ const end=b?new Date(b):new Date(), ms=Math.max(0,end-new Date(a)), total=Math.floor(ms/60000), h=Math.floor(total/60), m=total%60;
+ return h+" h "+String(m).padStart(2,"0")+" min";
+}
+function formatDate(x){return new Date(x).toLocaleString("es-ES",{dateStyle:"short",timeStyle:"medium"});}
+function esc(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));}
+
+renderMembers();renderConventions();fillConventionSelect();renderProducts();renderPacks();renderTimes();status();
+</script>
+</body>
+</html>
