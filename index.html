@@ -610,6 +610,17 @@ function persistPlantilla(){
   save("bahamas_employee_pins", employeePins);
   syncPlantillaToCloud();
 }
+function persistCatalogo(){
+  save("bahamas_products", products);
+  save("bahamas_packs", packs);
+  save("bahamas_agreements", agreements);
+  syncCatalogoToCloud();
+}
+function normalizarLista(lista){
+  if(Array.isArray(lista)) return lista.filter(Boolean);
+  if(lista && typeof lista==="object") return Object.values(lista);
+  return [];
+}
 function setCloudStatus(text){
   const el=document.getElementById("cloudStatus");
   if(el) el.textContent=text;
@@ -624,8 +635,11 @@ function normalizarTrabajadores(lista){
   return [];
 }
 let plantillaRef=null;
+let catalogoRef=null;
 let cloudReady=false;
+let catalogoReady=false;
 let ignoreCloudWrite=false;
+let ignoreCatalogoWrite=false;
 function aplicarPlantillaNube(data){
   const lista=normalizarTrabajadores(data && data.workers);
   if(!lista.length) return;
@@ -649,6 +663,60 @@ function syncPlantillaToCloud(){
     setTimeout(function(){ ignoreCloudWrite=false; }, 500);
   });
 }
+function aplicarCatalogoNube(data){
+  if(!data) return;
+  products=normalizarLista(data.products);
+  packs=normalizarLista(data.packs);
+  agreements=normalizarLista(data.agreements);
+  save("bahamas_products", products);
+  save("bahamas_packs", packs);
+  save("bahamas_agreements", agreements);
+  if(typeof renderAll==="function") renderAll();
+}
+function syncCatalogoToCloud(){
+  if(!catalogoRef || !catalogoReady) return;
+  ignoreCatalogoWrite=true;
+  catalogoRef.set({
+    products: products,
+    packs: packs,
+    agreements: agreements,
+    ok: true,
+    updatedAt: Date.now()
+  }).finally(function(){
+    setTimeout(function(){ ignoreCatalogoWrite=false; }, 500);
+  });
+}
+function iniciarCatalogoNube(){
+  if(!catalogoRef) return;
+  catalogoRef.once("value").then(function(snap){
+    const data=snap.val();
+    const localCount=products.length+packs.length+agreements.length;
+    if(data && data.ok){
+      const remoteCount=normalizarLista(data.products).length+normalizarLista(data.packs).length+normalizarLista(data.agreements).length;
+      if(remoteCount>0 || localCount===0){
+        aplicarCatalogoNube(data);
+      }
+    }else{
+      catalogoRef.set({
+        products: products,
+        packs: packs,
+        agreements: agreements,
+        ok: true,
+        updatedAt: Date.now()
+      });
+    }
+    catalogoReady=true;
+    if(data && data.ok){
+      const remoteCount=normalizarLista(data.products).length+normalizarLista(data.packs).length+normalizarLista(data.agreements).length;
+      if(remoteCount===0 && localCount>0) syncCatalogoToCloud();
+    }
+    catalogoRef.on("value", function(next){
+      if(ignoreCatalogoWrite) return;
+      const remote=next.val();
+      if(remote && remote.ok) aplicarCatalogoNube(remote);
+    });
+  }).catch(function(){});
+}
 function iniciarPlantillaNube(){
   if(!firebaseListo()){
     setCloudStatus("La plantilla todavía no está compartida. Hay que conectar Firebase para que todos vean los mismos empleados.");
@@ -661,6 +729,8 @@ function iniciarPlantillaNube(){
   try{
     firebase.initializeApp(FIREBASE_CONFIG);
     plantillaRef=firebase.database().ref("bahamas/plantilla");
+    catalogoRef=firebase.database().ref("bahamas/catalogo");
+    iniciarCatalogoNube();
   }catch(err){
     setCloudStatus("Firebase no se ha podido conectar. Revisa apiKey y databaseURL.");
     return;
@@ -679,7 +749,7 @@ function iniciarPlantillaNube(){
       });
     }
     cloudReady=true;
-    setCloudStatus("Plantilla compartida activa. Si añades o eliminas a alguien, el resto lo verá en unos segundos.");
+    setCloudStatus("Datos compartidos. Empleados, productos, packs y convenios se ven en todos los ordenadores.");
     plantillaRef.on("value", function(next){
       if(ignoreCloudWrite) return;
       const remote=next.val();
@@ -855,7 +925,7 @@ function addProduct(e){
   const finish=(image="")=>{
     products.push({id:Date.now(),name,price,image});
     try{
-      save("bahamas_products",products);
+      persistCatalogo();
     }catch(err){
       products.pop();
       alert("La imagen es demasiado grande. Elige una imagen más pequeña.");
@@ -904,7 +974,7 @@ function addProduct(e){
 function deleteProduct(id){
   if(!canManage()){ alert("Solo la Jefa y el Encargado pueden eliminar productos."); return false; }
   if(!canManage()){alert("Solo los jefes y encargados pueden eliminar productos.");return}
-  products=products.filter(p=>p.id!==id); cart=cart.filter(x=>x.type!=="pack" && x.productId!==id); save("bahamas_products",products); renderAll();
+  products=products.filter(p=>p.id!==id); cart=cart.filter(x=>x.type!=="pack" && x.productId!==id); persistCatalogo(); renderAll();
 }
 function addToCart(id){
   const p=products.find(x=>x.id===id); if(!p)return;
@@ -974,12 +1044,12 @@ function addAgreement(e){
   if(!canManage()){alert("Solo los jefes y encargados pueden añadir convenios.");return}
   e.preventDefault();
   agreements.push({id:Date.now(),name:document.getElementById("agreementName").value.trim(),discount:Number(document.getElementById("agreementDiscount").value)});
-  save("bahamas_agreements",agreements);e.target.reset();renderAll();
+  persistCatalogo();e.target.reset();renderAll();
 }
 function deleteAgreement(id){
   if(!canManage()){ alert("Solo la Jefa y el Encargado pueden eliminar convenios."); return false; }
   if(!canManage()){alert("Solo los jefes y encargados pueden eliminar convenios.");return}
-  agreements=agreements.filter(a=>a.id!==id);save("bahamas_agreements",agreements);renderAll()}
+  agreements=agreements.filter(a=>a.id!==id);persistCatalogo();renderAll()}
 
 function renderPacks(){
   const grid=document.getElementById("packGrid");
@@ -1096,7 +1166,7 @@ function savePackEdit(id){
     p.image=image;
 
     try{
-      save("bahamas_packs",packs);
+      persistCatalogo();
     }catch(err){
       p.name=old.name;
       p.price=old.price;
@@ -1158,7 +1228,7 @@ function addPack(e){
   const finish=(image="")=>{
     packs.push({id:Date.now(),name,price,image});
     try{
-      save("bahamas_packs",packs);
+      persistCatalogo();
     }catch(err){
       packs.pop();
       alert("La imagen es demasiado grande. Elige una imagen más pequeña.");
@@ -1200,7 +1270,7 @@ function deletePack(id){
   if(!canManage()){ alert("Solo la Jefa y el Encargado pueden eliminar packs."); return false; }
   packs=packs.filter(p=>p.id!==id);
   cart=cart.filter(x=>!(x.type==="pack" && x.packId===id));
-  save("bahamas_packs",packs);
+  persistCatalogo();
   renderAll();
 }
 
