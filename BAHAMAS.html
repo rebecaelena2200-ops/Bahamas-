@@ -687,8 +687,9 @@ function iniciarPlantillaNube(){
       const remote=next.val();
       if(remote && remote.workers) aplicarPlantillaNube(remote);
     });
-  }).catch(function(){
-    setCloudStatus("No se ha podido leer la base de datos. En Firebase, crea Realtime Database en modo prueba.");
+  }).catch(function(err){
+    const detalle=(err && err.message)?err.message:"sin detalle";
+    setCloudStatus("No se ha podido leer la base de datos ("+detalle+"). En Firebase: Realtime Database → Reglas → deja lectura y escritura en true y pulsa Publicar.");
   });
 }
 function money(n){return Number(n).toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2})+" €"}
