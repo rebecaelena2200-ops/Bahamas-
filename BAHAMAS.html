@@ -262,7 +262,7 @@ td{color:#ddd} tr:last-child td{border-bottom:0}
 
 
     <div id="salesHistory" class="card" style="margin-top:22px">
-      <h3 style="margin-top:0;color:var(--gold2)">Historial de ventas</h3>
+      <h3 id="salesHistoryTitle" style="margin-top:0;color:var(--gold2)">Historial de ventas</h3>
       <div id="salesHistoryTable"></div>
     </div>
 
@@ -621,16 +621,6 @@ if(localStorage.getItem("bahamas_catalog_reset_v1") !== "ok"){
   localStorage.removeItem("bahamas_agreements");
   localStorage.setItem("bahamas_catalog_reset_v1", "ok");
 }
-if(localStorage.getItem("bahamas_caja_reset_v2") !== "ok"){
-  localStorage.removeItem("bahamas_caja_balance");
-  localStorage.removeItem("bahamas_caja_movements");
-  localStorage.setItem("bahamas_caja_reset_v2", "ok");
-  window.__bahamasCajaZero=true;
-}
-if(localStorage.getItem("bahamas_sales_reset_v1") !== "ok"){
-  localStorage.removeItem("bahamas_sales");
-  localStorage.setItem("bahamas_sales_reset_v1", "ok");
-}
 const defaultProducts = [];
 const defaultAgreements = [];
 const defaultPacks = [];
@@ -675,9 +665,12 @@ function persistFichaje(){
   syncFichajeToCloud();
 }
 function persistCaja(){
+  const ts=Date.now();
   save("bahamas_caja_balance", cajaBalance);
   save("bahamas_caja_movements", cajaMovements);
-  syncCajaToCloud();
+  save("bahamas_sales", sales);
+  save("bahamas_negocio_updated", ts);
+  syncCajaToCloud(ts);
 }
 function normalizarLista(lista){
   if(Array.isArray(lista)) return lista.filter(Boolean);
@@ -833,21 +826,33 @@ function iniciarFichajeNube(){
 }
 function aplicarCajaNube(data){
   if(!data) return;
-  cajaBalance=Number(data.balance)||0;
+  const remoteAt=Number(data.updatedAt)||0;
+  const localAt=Number(load("bahamas_negocio_updated", 0))||0;
+  const remoteBal=Number(data.balance)||0;
+  if(localAt>remoteAt || (cajaBalance>remoteBal && cajaBalance>0 && remoteAt<=localAt)){
+    persistCaja();
+    return;
+  }
+  cajaBalance=remoteBal;
   cajaMovements=normalizarLista(data.movements);
+  if(data.sales) sales=normalizarLista(data.sales);
   save("bahamas_caja_balance", cajaBalance);
   save("bahamas_caja_movements", cajaMovements);
+  save("bahamas_sales", sales);
+  save("bahamas_negocio_updated", remoteAt||Date.now());
   if(typeof renderCaja==="function") renderCaja();
   if(typeof renderBusinessStats==="function") renderBusinessStats();
+  if(typeof renderSalesHistory==="function") renderSalesHistory();
 }
-function syncCajaToCloud(){
-  if(!cajaRef || !cajaReady) return;
+function syncCajaToCloud(ts){
+  if(!cajaRef) return;
   ignoreCajaWrite=true;
   cajaRef.set({
     balance: cajaBalance,
     movements: cajaMovements,
+    sales: sales,
     ok: true,
-    updatedAt: Date.now()
+    updatedAt: ts||Date.now()
   }).finally(function(){
     setTimeout(function(){ ignoreCajaWrite=false; }, 500);
   });
@@ -856,24 +861,14 @@ function iniciarCajaNube(){
   if(!cajaRef) return;
   cajaRef.once("value").then(function(snap){
     const data=snap.val();
-    if(window.__bahamasCajaZero){
-      cajaBalance=0;
-      cajaMovements=[];
-      cajaReady=true;
+    cajaReady=true;
+    if(cajaBalance>0 || (sales&&sales.length) || (cajaMovements&&cajaMovements.length)){
       persistCaja();
     }else if(data && data.ok){
       aplicarCajaNube(data);
-      cajaReady=true;
     }else{
-      cajaRef.set({
-        balance: cajaBalance,
-        movements: cajaMovements,
-        ok: true,
-        updatedAt: Date.now()
-      });
-      cajaReady=true;
+      persistCaja();
     }
-    if(!cajaReady) cajaReady=true;
     cajaRef.on("value", function(next){
       if(ignoreCajaWrite) return;
       const remote=next.val();
@@ -1540,11 +1535,23 @@ function totalHoursForWorker(name){
   return workHistory.filter(x=>x.worker===name && x.out && new Date(x.in).getTime()>=start).reduce((s,x)=>s+(Number(x.hours)||0),0);
 }
 
+function visibleSales(){
+  if(!Array.isArray(sales)) return [];
+  if(isJefe()) return sales;
+  return sales.filter(s=>s.worker===activeWorker);
+}
 function renderSalesHistory(){
   const box=document.getElementById("salesHistoryTable");
-  if(!sales.length){box.innerHTML='<div class="empty">Todavía no hay ventas finalizadas.</div>';return}
+  if(!box) return;
+  const title=document.getElementById("salesHistoryTitle");
+  const list=visibleSales();
+  if(title) title.textContent=isJefe()?"Historial de ventas · Todas las de la plantilla":"Historial de ventas";
+  if(!list.length){
+    box.innerHTML='<div class="empty">'+(isJefe()?"Todavía no hay ventas finalizadas.":"Todavía no has finalizado ventas.")+'</div>';
+    return;
+  }
   box.innerHTML=`<table><thead><tr><th>Fecha</th><th>Trabajador</th><th>Convenio</th><th>Total</th></tr></thead><tbody>
-  ${sales.slice(0,50).map(s=>`<tr><td>${fmtDate(s.date)}</td><td>${esc(s.worker)}</td><td>${esc(s.agreement)}</td><td><strong>${money(s.total)}</strong></td></tr>`).join("")}
+  ${list.slice(0,isJefe()?300:50).map(s=>`<tr><td>${fmtDate(s.date)}</td><td>${esc(s.worker)}</td><td>${esc(s.agreement)}</td><td><strong>${money(s.total)}</strong></td></tr>`).join("")}
   </tbody></table>`;
 }
 
@@ -1646,8 +1653,11 @@ function renderServiceCards(){
     </div>`).join("");
 }
 function renderBusinessStats(){
-  const total=sales.reduce((s,x)=>s+(Number(x.total)||0),0);
-  const bonuses=workers.reduce((s,w)=>s+bonusForHours(totalHoursForWorker(w.name)),0);
+  const list=visibleSales();
+  const total=list.reduce((s,x)=>s+(Number(x.total)||0),0);
+  const bonuses=isJefe()
+    ? workers.reduce((s,w)=>s+bonusForHours(totalHoursForWorker(w.name)),0)
+    : bonusForHours(totalHoursForWorker(activeWorker));
   const salesCard=document.getElementById("statSalesCard");
   const businessCard=document.getElementById("statBusinessCard");
   const bonusesCard=document.getElementById("statBonusesCard");
@@ -1659,7 +1669,7 @@ function renderBusinessStats(){
   document.getElementById("statSales").textContent=money(total);
   document.getElementById("statBusiness").textContent=money(cajaBalance);
   document.getElementById("statBonuses").textContent=money(bonuses);
-  document.getElementById("statSalesCount").textContent=sales.length+" "+(sales.length===1?"venta":"ventas");
+  document.getElementById("statSalesCount").textContent=list.length+" "+(list.length===1?"venta":"ventas");
 }
 function addCajaMoney(e,tipo){
   if(e) e.preventDefault();
