@@ -154,9 +154,14 @@ td{color:#ddd} tr:last-child td{border-bottom:0}
 .hours-reset-bar span{color:var(--muted);font-size:13px;max-width:560px;line-height:1.45}
 .service-data{display:grid;grid-template-columns:1fr;gap:8px}
 .empty{padding:30px;text-align:center;color:var(--muted);border:1px dashed #4a2a38;border-radius:10px}
+.renew-alert{margin:0 0 18px;padding:14px 16px;border:1px solid #c47a3a;background:#2a1610;border-radius:12px;color:#f6d9b8;line-height:1.5}
+.renew-alert strong{color:#ffd4a0}
+.renew-alert ul{margin:8px 0 0;padding-left:18px}
+.renew-alert li{margin:4px 0}
+.agreement-form{grid-template-columns:1.1fr .55fr .9fr 1.2fr auto}
 .footer{text-align:center;color:#9a7a86;padding:25px;border-top:1px solid var(--line);font-size:12px}
 @media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.sales-layout{grid-template-columns:1fr}.cart{position:static}.product-grid{grid-template-columns:1fr}.business-stats{grid-template-columns:1fr 1fr}.hours-row{grid-template-columns:130px 1fr 75px}}
-@media(max-width:600px){.business-stats{grid-template-columns:1fr}.hours-row{grid-template-columns:1fr}.hours-value{text-align:left}.service-cards{grid-template-columns:1fr}.service-data{grid-template-columns:1fr}.product-form,.pack-form{grid-template-columns:1fr}.header-inner{align-items:flex-start;flex-direction:column}.grid,.pack-grid,.clock-grid,.summary{grid-template-columns:1fr}.form,.form.two{grid-template-columns:1fr}.container{padding-left:14px;padding-right:14px}.hero{padding-top:30px}}
+@media(max-width:600px){.business-stats{grid-template-columns:1fr}.hours-row{grid-template-columns:1fr}.hours-value{text-align:left}.service-cards{grid-template-columns:1fr}.service-data{grid-template-columns:1fr}.product-form,.pack-form,.agreement-form{grid-template-columns:1fr}.header-inner{align-items:flex-start;flex-direction:column}.grid,.pack-grid,.clock-grid,.summary{grid-template-columns:1fr}.form,.form.two{grid-template-columns:1fr}.container{padding-left:14px;padding-right:14px}.hero{padding-top:30px}}
 </style>
 </head>
 <body>
@@ -238,6 +243,7 @@ td{color:#ddd} tr:last-child td{border-bottom:0}
       <div class="stat-card" id="statBusinessCard"><span>Dinero del negocio</span><strong id="statBusiness">0,00 $</strong><small>Caja actual</small></div>
       <div class="stat-card" id="statBonusesCard"><span>Primas generadas</span><strong id="statBonuses">0 $</strong><small>Según horas trabajadas</small></div>
     </div>
+    <div id="agreementRenewAlert" class="renew-alert" style="display:none"></div>
 
     <div class="tabs">
       <button class="tab active" data-tab="ventas">VENTAS</button>
@@ -284,9 +290,13 @@ td{color:#ddd} tr:last-child td{border-bottom:0}
     <div id="convenios" class="subview">
       <div class="section-title"><h2>Convenios</h2><span id="agreementsAccessText">Descuentos para clientes</span></div>
       <div id="agreementAdminArea">
-        <form class="form product-form" onsubmit="addAgreement(event)">
+        <form class="form agreement-form" onsubmit="addAgreement(event)">
           <input id="agreementName" placeholder="Nombre del convenio" required>
           <input id="agreementDiscount" type="number" min="0" max="100" step="0.1" placeholder="Descuento %" required>
+          <div>
+            <label style="display:block;color:var(--muted);font-size:11px;margin-bottom:4px">Renovar antes de</label>
+            <input id="agreementRenew" type="date">
+          </div>
           <div class="image-picker">
             <label for="agreementImage" class="image-label">🖼️ Elegir imagen</label>
             <input id="agreementImage" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
@@ -1287,21 +1297,86 @@ function finishSale(){
   cart=[];document.getElementById("saleAgreement").value="";renderAll();
 }
 
+function daysUntilDate(dateStr){
+  if(!dateStr) return null;
+  const t=new Date(String(dateStr).slice(0,10)+"T00:00:00");
+  if(isNaN(t.getTime())) return null;
+  const n=new Date();
+  n.setHours(0,0,0,0);
+  return Math.round((t.getTime()-n.getTime())/86400000);
+}
+function agreementRenewLabel(a){
+  const d=daysUntilDate(a && a.renewUntil);
+  if(d===null) return "Sin fecha de renovación";
+  if(d<0) return "Caducado · hay que renovar";
+  if(d===0) return "Caduca hoy · hay que renovar";
+  if(d<=14) return "Renovar en "+d+" día"+(d===1?"":"s");
+  return "Válido hasta "+fmtDay(a.renewUntil);
+}
+function agreementsNeedingRenew(){
+  return (agreements||[]).filter(function(a){
+    const d=daysUntilDate(a.renewUntil);
+    return d===null || d<=14;
+  });
+}
+function fmtDay(dateStr){
+  if(!dateStr) return "—";
+  const t=new Date(String(dateStr).slice(0,10)+"T00:00:00");
+  if(isNaN(t.getTime())) return "—";
+  return t.toLocaleDateString("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
+}
+function renderAgreementRenewAlert(){
+  const box=document.getElementById("agreementRenewAlert");
+  if(!box) return;
+  if(!isJefe()){
+    box.style.display="none";
+    box.innerHTML="";
+    return;
+  }
+  const list=agreementsNeedingRenew();
+  if(!list.length){
+    box.style.display="none";
+    box.innerHTML="";
+    return;
+  }
+  box.style.display="block";
+  box.innerHTML="<strong>Aviso · Hay que renovar convenios</strong><div style=\"margin-top:6px;font-size:13px\">Revisa estos convenios y pon una fecha nueva o pulsa Renovar.</div><ul>"+
+    list.map(function(a){ return "<li><strong>"+esc(a.name)+"</strong> — "+esc(agreementRenewLabel(a))+"</li>"; }).join("")+
+    "</ul>";
+}
+function renewAgreement(id){
+  if(!canManage()){ alert("Solo la Jefa y el Encargado pueden renovar convenios."); return; }
+  const a=agreements.find(x=>x.id===id);
+  if(!a) return;
+  const next=new Date();
+  next.setFullYear(next.getFullYear()+1);
+  const val=prompt("Nueva fecha de renovación (AAAA-MM-DD)", next.toISOString().slice(0,10));
+  if(!val) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(val) || isNaN(new Date(val+"T00:00:00").getTime())){
+    alert("Fecha no válida. Usa el formato AAAA-MM-DD.");
+    return;
+  }
+  a.renewUntil=val;
+  persistCatalogo();
+  renderAll();
+}
 function renderAgreements(){
   const sel=document.getElementById("saleAgreement");
   sel.innerHTML='<option value="">Sin convenio</option>'+agreements.map(a=>`<option value="${a.id}">${esc(a.name)} · ${a.discount}%</option>`).join("");
   document.getElementById("agreementTable").innerHTML=agreements.length?`
-  <table><thead><tr><th>Convenio</th><th>Descuento</th>${canManage()?"<th></th>":""}</tr></thead><tbody>
+  <table><thead><tr><th>Convenio</th><th>Descuento</th><th>Renovación</th>${canManage()?"<th></th>":""}</tr></thead><tbody>
   ${agreements.map(a=>`<tr>
     <td><div class="product-info">${a.image?`<img class="product-image" src="${a.image}" alt="${esc(a.name)}">`:`<div class="product-no-image">🏷️</div>`}<strong>${esc(a.name)}</strong></div></td>
     <td>${a.discount}%</td>
-    ${canManage()?`<td style="text-align:right"><button class="danger" onclick="deleteAgreement(${a.id})">Eliminar</button></td>`:""}
+    <td>${esc(agreementRenewLabel(a))}</td>
+    ${canManage()?`<td style="text-align:right;white-space:nowrap"><button class="secondary" type="button" onclick="renewAgreement(${a.id})">Renovar</button> <button class="danger" onclick="deleteAgreement(${a.id})">Eliminar</button></td>`:""}
   </tr>`).join("")}
   </tbody></table>`:`<div class="empty">No hay convenios.</div>`;
 
   const agreementAdmin=document.getElementById("agreementAdminArea");
   agreementAdmin.style.display=canManage()?"block":"none";
-  document.getElementById("agreementsAccessText").textContent=canManage()?"Puedes añadir y eliminar convenios":"Solo consulta · Los convenios los gestionan jefes y encargados";
+  document.getElementById("agreementsAccessText").textContent=canManage()?"Puedes añadir, renovar y eliminar convenios":"Solo consulta · Los convenios los gestionan jefes y encargados";
+  renderAgreementRenewAlert();
   renderCart();
 }
 function addAgreement(e){
@@ -1310,9 +1385,10 @@ function addAgreement(e){
   e.preventDefault();
   const name=document.getElementById("agreementName").value.trim();
   const discount=Number(document.getElementById("agreementDiscount").value);
+  const renewUntil=document.getElementById("agreementRenew").value||"";
   const file=document.getElementById("agreementImage").files[0];
   const finish=(image="")=>{
-    agreements.push({id:Date.now(),name,discount,image});
+    agreements.push({id:Date.now(),name,discount,image,renewUntil});
     try{
       persistCatalogo();
     }catch(err){
