@@ -100,6 +100,10 @@ table{width:100%;border-collapse:collapse;background:var(--panel);border:1px sol
 th,td{text-align:left;padding:12px;border-bottom:1px solid var(--line);font-size:14px}
 th{color:var(--gold2);font-size:12px;text-transform:uppercase;letter-spacing:1px}
 td{color:#ddd} tr:last-child td{border-bottom:0}
+.sales-history-wrap{max-height:210px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+.sales-history-wrap table{border:0;margin:0}
+.sales-history-wrap th,.sales-history-wrap td{padding:7px 10px;font-size:12px}
+.sales-history-more{margin-top:10px;width:100%}
 .sales-layout{display:grid;grid-template-columns:1fr 350px;gap:18px;align-items:start}
 .product-form{grid-template-columns:1.1fr .7fr 1.2fr auto}
 .image-picker{background:#160c12;border:1px solid #4a2a38;border-radius:8px;padding:8px}
@@ -256,6 +260,10 @@ td{color:#ddd} tr:last-child td{border-bottom:0}
           <div id="cartItems"></div>
           <label style="display:block;color:var(--muted);font-size:13px;margin-top:15px">Convenio del cliente</label>
           <select id="saleAgreement" onchange="renderCart()" style="margin-top:7px"></select>
+          <div id="saleAgreementPreview" class="product-info" style="display:none;margin-top:10px">
+            <img id="saleAgreementImg" class="product-image" alt="">
+            <small id="saleAgreementCaption" style="color:var(--muted)"></small>
+          </div>
           <div class="total-box">
             <div class="total-row" id="subtotalRow" style="display:none"><span>Subtotal</span><strong id="subtotal">0,00 $</strong></div>
             <div class="total-row discount" id="discountRow" style="display:none"><span>Descuento</span><strong id="discountAmount">- 0,00 $</strong></div>
@@ -275,9 +283,15 @@ td{color:#ddd} tr:last-child td{border-bottom:0}
     <div id="convenios" class="subview">
       <div class="section-title"><h2>Convenios</h2><span id="agreementsAccessText">Descuentos para clientes</span></div>
       <div id="agreementAdminArea">
-        <form class="form" onsubmit="addAgreement(event)">
+        <form class="form product-form" onsubmit="addAgreement(event)">
           <input id="agreementName" placeholder="Nombre del convenio" required>
           <input id="agreementDiscount" type="number" min="0" max="100" step="0.1" placeholder="Descuento %" required>
+          <div class="image-picker">
+            <label for="agreementImage" class="image-label">🖼️ Elegir imagen</label>
+            <input id="agreementImage" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+            <div id="agreementImageName">Ninguna imagen seleccionada</div>
+            <img id="agreementImagePreview" class="image-preview" style="display:none" alt="Vista previa">
+          </div>
           <button class="primary">Añadir convenio</button>
         </form>
       </div>
@@ -340,14 +354,16 @@ td{color:#ddd} tr:last-child td{border-bottom:0}
           <h3 style="color:var(--gold2);margin-top:0">Último servicio</h3>
           <div id="lastService" class="empty">Todavía no hay un servicio terminado.</div>
           <div id="serviceSummary" class="fichaje-resumen" style="display:none">
+            <div>▪︎ Nombre: <strong id="lastName">—</strong></div>
             <div>▪︎ Hora de inicio: <strong id="lastIn">—</strong></div>
             <div>▪︎ Hora de salida: <strong id="lastOut">—</strong></div>
             <div>▪︎ Horas totales: <strong id="lastHours">—</strong></div>
             <div>▪︎ Horas acumuladas: <strong id="lastAcc">—</strong></div>
+            <button type="button" class="copy-btn" id="copyLastServiceBtn" onclick="copyLastService()">📋 Copiar</button>
           </div>
         </div>
       </div>
-      <div class="section-title"><h2>Historial</h2></div>
+      <div class="section-title"><h2>Historial</h2><span><button type="button" class="secondary" onclick="copyHoursHistory()">📋 Copiar historial</button></span></div>
       <div id="timeHistory"></div>
       <div class="card service-board">
         <h3 style="margin-top:0;color:var(--gold2)">Resumen de servicios</h3>
@@ -637,6 +653,7 @@ let packs = load("bahamas_packs", defaultPacks);
 let workHistory = load("bahamas_work_history", []);
 let hoursWeekStart = load("bahamas_hours_week_start", "");
 let sales = load("bahamas_sales", []);
+let salesHistoryOpen=false;
 let cajaBalance = Number(load("bahamas_caja_balance", 0))||0;
 let cajaMovements = load("bahamas_caja_movements", []);
 let activeWorker = sessionStorage.getItem("bahamas_active_worker") || ""; 
@@ -1220,6 +1237,19 @@ function renderCart(){
   const subtotal=cartSubtotal();
   const a=agreements.find(x=>x.id==document.getElementById("saleAgreement").value);
   const discount=a?subtotal*Number(a.discount)/100:0;
+  const preview=document.getElementById("saleAgreementPreview");
+  const previewImg=document.getElementById("saleAgreementImg");
+  const previewCap=document.getElementById("saleAgreementCaption");
+  if(preview){
+    if(a && a.image){
+      preview.style.display="flex";
+      if(previewImg){ previewImg.src=a.image; previewImg.alt=a.name; }
+      if(previewCap) previewCap.textContent=a.name+" · "+a.discount+"%";
+    }else{
+      preview.style.display="none";
+      if(previewImg) previewImg.src="";
+    }
+  }
   document.getElementById("subtotal").textContent=money(subtotal);
   const subtotalRow=document.getElementById("subtotalRow");
   const discountRow=document.getElementById("discountRow");
@@ -1258,8 +1288,13 @@ function finishSale(){
 function renderAgreements(){
   const sel=document.getElementById("saleAgreement");
   sel.innerHTML='<option value="">Sin convenio</option>'+agreements.map(a=>`<option value="${a.id}">${esc(a.name)} · ${a.discount}%</option>`).join("");
-  document.getElementById("agreementTable").innerHTML=agreements.length?`<table><thead><tr><th>Convenio</th><th>Descuento</th>${canManage()?"<th></th>":""}</tr></thead><tbody>
-  ${agreements.map(a=>`<tr><td>${esc(a.name)}</td><td>${a.discount}%</td>${canManage()?`<td style="text-align:right"><button class="danger" onclick="deleteAgreement(${a.id})">Eliminar</button></td>`:""}</tr>`).join("")}
+  document.getElementById("agreementTable").innerHTML=agreements.length?`
+  <table><thead><tr><th>Convenio</th><th>Descuento</th>${canManage()?"<th></th>":""}</tr></thead><tbody>
+  ${agreements.map(a=>`<tr>
+    <td><div class="product-info">${a.image?`<img class="product-image" src="${a.image}" alt="${esc(a.name)}">`:`<div class="product-no-image">🏷️</div>`}<strong>${esc(a.name)}</strong></div></td>
+    <td>${a.discount}%</td>
+    ${canManage()?`<td style="text-align:right"><button class="danger" onclick="deleteAgreement(${a.id})">Eliminar</button></td>`:""}
+  </tr>`).join("")}
   </tbody></table>`:`<div class="empty">No hay convenios.</div>`;
 
   const agreementAdmin=document.getElementById("agreementAdminArea");
@@ -1271,8 +1306,52 @@ function addAgreement(e){
   if(!canManage()){ alert("Solo la Jefa y el Encargado pueden gestionar convenios y descuentos."); return false; }
   if(!canManage()){alert("Solo los jefes y encargados pueden añadir convenios.");return}
   e.preventDefault();
-  agreements.push({id:Date.now(),name:document.getElementById("agreementName").value.trim(),discount:Number(document.getElementById("agreementDiscount").value)});
-  persistCatalogo();e.target.reset();renderAll();
+  const name=document.getElementById("agreementName").value.trim();
+  const discount=Number(document.getElementById("agreementDiscount").value);
+  const file=document.getElementById("agreementImage").files[0];
+  const finish=(image="")=>{
+    agreements.push({id:Date.now(),name,discount,image});
+    try{
+      persistCatalogo();
+    }catch(err){
+      agreements.pop();
+      alert("La imagen es demasiado grande. Elige una imagen más pequeña.");
+      return;
+    }
+    e.target.reset();
+    document.getElementById("agreementImageName").textContent="Ninguna imagen seleccionada";
+    document.getElementById("agreementImagePreview").style.display="none";
+    document.getElementById("agreementImagePreview").src="";
+    renderAll();
+  };
+  if(!file){
+    finish("");
+    return;
+  }
+  if(!file.type.startsWith("image/")){
+    alert("Selecciona una imagen válida.");
+    return;
+  }
+  const reader=new FileReader();
+  reader.onload=()=>{
+    const img=new Image();
+    img.onload=()=>{
+      const max=700;
+      let w=img.width, h=img.height;
+      if(w>max || h>max){
+        const scale=Math.min(max/w,max/h);
+        w=Math.round(w*scale); h=Math.round(h*scale);
+      }
+      const canvas=document.createElement("canvas");
+      canvas.width=w; canvas.height=h;
+      canvas.getContext("2d").drawImage(img,0,0,w,h);
+      finish(canvas.toDataURL("image/jpeg",0.78));
+    };
+    img.onerror=()=>alert("No se ha podido cargar esa imagen.");
+    img.src=reader.result;
+  };
+  reader.onerror=()=>alert("No se ha podido leer la imagen.");
+  reader.readAsDataURL(file);
 }
 function deleteAgreement(id){
   if(!canManage()){ alert("Solo la Jefa y el Encargado pueden eliminar convenios."); return false; }
@@ -1559,6 +1638,7 @@ function renderClock(){
   if(finished){
     document.getElementById("lastService").style.display="none";
     document.getElementById("serviceSummary").style.display="flex";
+    document.getElementById("lastName").textContent=activeWorker||"—";
     document.getElementById("lastIn").textContent=fmtHora(finished.in);
     document.getElementById("lastOut").textContent=fmtHora(finished.out);
     document.getElementById("lastHours").textContent=hoursText(finished.hours);
@@ -1569,8 +1649,8 @@ function renderClock(){
   }
 
   const mine=workHistory.filter(x=>x.worker===activeWorker);
-  document.getElementById("timeHistory").innerHTML=mine.length?`<table><thead><tr><th>Entrada</th><th>Salida</th><th>Horas trabajadas</th></tr></thead><tbody>
-  ${mine.map(x=>`<tr><td>${fmtDate(x.in)}</td><td>${x.out?fmtDate(x.out):'<span style="color:var(--gold2)">En servicio</span>'}</td><td>${x.out?hoursText(x.hours):"—"}</td></tr>`).join("")}
+  document.getElementById("timeHistory").innerHTML=mine.length?`<table><thead><tr><th>Nombre</th><th>Entrada</th><th>Salida</th><th>Horas trabajadas</th></tr></thead><tbody>
+  ${mine.map(x=>`<tr><td>${esc(activeWorker)}</td><td>${fmtDate(x.in)}</td><td>${x.out?fmtDate(x.out):'<span style="color:var(--gold2)">En servicio</span>'}</td><td>${x.out?hoursText(x.hours):"—"}</td></tr>`).join("")}
   </tbody></table>`:`<div class="empty">No hay fichajes todavía.</div>`;
 }
 
@@ -1591,6 +1671,10 @@ function visibleSales(){
   if(isJefe()) return sales;
   return sales.filter(s=>s.worker===activeWorker);
 }
+function toggleSalesHistory(){
+  salesHistoryOpen=!salesHistoryOpen;
+  renderSalesHistory();
+}
 function renderSalesHistory(){
   const box=document.getElementById("salesHistoryTable");
   if(!box) return;
@@ -1601,24 +1685,46 @@ function renderSalesHistory(){
     box.innerHTML='<div class="empty">'+(isJefe()?"Todavía no hay ventas finalizadas.":"Todavía no has finalizado ventas.")+'</div>';
     return;
   }
-  box.innerHTML=`<table><thead><tr><th>Fecha</th><th>Trabajador</th><th>Convenio</th><th>Total</th></tr></thead><tbody>
-  ${list.slice(0,isJefe()?300:50).map(s=>`<tr><td>${fmtDate(s.date)}</td><td>${esc(s.worker)}</td><td>${esc(s.agreement)}</td><td><strong>${money(s.total)}</strong></td></tr>`).join("")}
-  </tbody></table>`;
+  const limit=salesHistoryOpen?20:6;
+  const shown=list.slice(0,limit);
+  box.innerHTML=`<div class="sales-history-wrap"><table><thead><tr><th>Fecha</th><th>Quién</th><th>Total</th></tr></thead><tbody>
+  ${shown.map(s=>`<tr><td>${fmtDate(s.date)}</td><td>${esc(s.worker)}</td><td><strong>${money(s.total)}</strong></td></tr>`).join("")}
+  </tbody></table></div>
+  ${list.length>6?`<button type="button" class="secondary sales-history-more" onclick="toggleSalesHistory()">${salesHistoryOpen?"Ver menos":"Ver más"}</button>`:""}`;
 }
 
+function serviceCopyText(s){
+  const name=(s&&s.worker)||activeWorker||"";
+  const horaIn=s?new Date(s.in).toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}):"—";
+  const horaOut=s&&s.out?new Date(s.out).toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}):"En servicio";
+  return `▪︎ Nombre: ${name}
+▪︎ Hora de inicio: ${horaIn}
+▪︎ Hora de salida: ${horaOut}
+▪︎ Horas totales: ${s&&s.out?hoursText(s.hours):"—"}
+▪︎ Horas acumuladas: ${hoursText(totalHoursForWorker(name))}`;
+}
 function copyService(id){
   const s=workHistory.find(x=>x.id===id);
   if(!s)return;
-  const horaIn=new Date(s.in).toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"});
-  const horaOut=s.out?new Date(s.out).toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"}):"En servicio";
-  const text=`${s.worker}
+  copyPlainText(serviceCopyText(s), document.querySelector(`[data-copy-id="${id}"]`));
+}
+function copyLastService(){
+  const s=workHistory.find(x=>x.worker===activeWorker && x.out);
+  if(!s){ alert("Todavía no hay un servicio terminado."); return; }
+  copyPlainText(serviceCopyText(s), document.getElementById("copyLastServiceBtn"));
+}
+function copyHoursHistory(){
+  if(!activeWorker){ alert("Entra primero a tu panel."); return; }
+  const mine=workHistory.filter(x=>x.worker===activeWorker);
+  if(!mine.length){ alert("No hay fichajes todavía."); return; }
+  const text=`▪︎ Nombre: ${activeWorker}
 
-▪︎ Hora de inicio: ${horaIn}
-▪︎ Hora de salida: ${horaOut}
-▪︎ Horas totales: ${s.out?hoursText(s.hours):"—"}
-▪︎ Horas acumuladas: ${hoursText(totalHoursForWorker(s.worker))}`;
+${mine.map(x=>`▪︎ ${fmtDate(x.in)} → ${x.out?fmtDate(x.out):"En servicio"} · ${x.out?hoursText(x.hours):"—"}`).join("\n")}
 
-  const btn=document.querySelector(`[data-copy-id="${id}"]`);
+▪︎ Horas acumuladas: ${hoursText(totalHoursForWorker(activeWorker))}`;
+  copyPlainText(text);
+}
+function copyPlainText(text, btn){
   const copied=()=>{
     if(btn){
       const original=btn.textContent;
@@ -1627,8 +1733,6 @@ function copyService(id){
       setTimeout(()=>{btn.textContent=original;btn.disabled=false},1500);
     }
   };
-
-  // Intento moderno.
   if(navigator.clipboard && window.isSecureContext){
     navigator.clipboard.writeText(text).then(copied).catch(()=>copyFallback(text,copied));
   }else{
@@ -1695,6 +1799,7 @@ function renderServiceCards(){
         <span>SERVICIO TERMINADO</span>
       </div>
       <div class="fichaje-resumen">
+        <div>▪︎ Nombre: <strong>${esc(s.worker)}</strong></div>
         <div>▪︎ Hora de inicio: <strong>${fmtHora(s.in)}</strong></div>
         <div>▪︎ Hora de salida: <strong>${fmtHora(s.out)}</strong></div>
         <div>▪︎ Horas totales: <strong>${hoursText(s.hours)}</strong></div>
@@ -1861,6 +1966,27 @@ if(packImageInput){
     const file=packImageInput.files[0];
     const nameBox=document.getElementById("packImageName");
     const preview=document.getElementById("packImagePreview");
+    if(!file){
+      nameBox.textContent="Ninguna imagen seleccionada";
+      preview.style.display="none";
+      return;
+    }
+    nameBox.textContent=file.name;
+    const reader=new FileReader();
+    reader.onload=()=>{
+      preview.src=reader.result;
+      preview.style.display="block";
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+const agreementImageInput=document.getElementById("agreementImage");
+if(agreementImageInput){
+  agreementImageInput.addEventListener("change",()=>{
+    const file=agreementImageInput.files[0];
+    const nameBox=document.getElementById("agreementImageName");
+    const preview=document.getElementById("agreementImagePreview");
     if(!file){
       nameBox.textContent="Ninguna imagen seleccionada";
       preview.style.display="none";
