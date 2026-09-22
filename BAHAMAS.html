@@ -664,6 +664,36 @@ function persistFichaje(){
   save("bahamas_hours_week_start", hoursWeekStart);
   syncFichajeToCloud();
 }
+function itemKey(item){
+  if(!item) return "";
+  if(item.id!=null && item.id!=="") return "id:"+item.id;
+  return [item.tipo||"", item.worker||"", item.date||"", item.amount||item.total||""].join("|");
+}
+function mergeById(a,b){
+  const map={};
+  [].concat(a||[], b||[]).forEach(function(item){
+    const k=itemKey(item);
+    if(!k) return;
+    if(!map[k]) map[k]=item;
+  });
+  return Object.keys(map).map(function(k){ return map[k]; }).sort(function(x,y){
+    const dx=new Date(x.date||0).getTime()||Number(x.id)||0;
+    const dy=new Date(y.date||0).getTime()||Number(y.id)||0;
+    return dy-dx;
+  });
+}
+function listaTieneExtra(merged, remote){
+  const ids={};
+  (remote||[]).forEach(function(x){ ids[itemKey(x)]=true; });
+  return (merged||[]).some(function(x){ return !ids[itemKey(x)]; });
+}
+function balanceFromMovements(list){
+  return (list||[]).reduce(function(s,m){
+    const n=Number(m.amount)||0;
+    if(String(m.tipo||"").toLowerCase()==="retiro") return s-n;
+    return s+n;
+  },0);
+}
 function persistCaja(){
   const ts=Date.now();
   save("bahamas_caja_balance", cajaBalance);
@@ -826,35 +856,34 @@ function iniciarFichajeNube(){
 }
 function aplicarCajaNube(data){
   if(!data) return;
+  const remoteSales=data.sales?normalizarLista(data.sales):[];
+  const remoteMov=normalizarLista(data.movements);
+  const mergedSales=mergeById(sales, remoteSales);
+  const mergedMov=mergeById(cajaMovements, remoteMov);
+  const localExtra=listaTieneExtra(mergedSales, remoteSales)||listaTieneExtra(mergedMov, remoteMov);
+  sales=mergedSales;
+  cajaMovements=mergedMov;
+  cajaBalance=mergedMov.length?balanceFromMovements(mergedMov):(Number(data.balance)||cajaBalance||0);
   const remoteAt=Number(data.updatedAt)||0;
-  const localAt=Number(load("bahamas_negocio_updated", 0))||0;
-  const remoteBal=Number(data.balance)||0;
-  if(localAt>remoteAt || (cajaBalance>remoteBal && cajaBalance>0 && remoteAt<=localAt)){
-    persistCaja();
-    return;
-  }
-  cajaBalance=remoteBal;
-  cajaMovements=normalizarLista(data.movements);
-  if(data.sales) sales=normalizarLista(data.sales);
   save("bahamas_caja_balance", cajaBalance);
   save("bahamas_caja_movements", cajaMovements);
   save("bahamas_sales", sales);
-  save("bahamas_negocio_updated", remoteAt||Date.now());
+  save("bahamas_negocio_updated", localExtra?Date.now():(remoteAt||Date.now()));
   if(typeof renderCaja==="function") renderCaja();
   if(typeof renderBusinessStats==="function") renderBusinessStats();
   if(typeof renderSalesHistory==="function") renderSalesHistory();
+  if(localExtra) persistCaja();
 }
 function syncCajaToCloud(ts){
-  if(!cajaRef) return;
-  ignoreCajaWrite=true;
+  if(!cajaRef || !cajaReady) return;
   cajaRef.set({
     balance: cajaBalance,
     movements: cajaMovements,
     sales: sales,
     ok: true,
     updatedAt: ts||Date.now()
-  }).finally(function(){
-    setTimeout(function(){ ignoreCajaWrite=false; }, 500);
+  }).catch(function(){
+    setCloudStatus("No se han podido guardar las ventas en la nube. Revisa internet.");
   });
 }
 function iniciarCajaNube(){
@@ -862,19 +891,18 @@ function iniciarCajaNube(){
   cajaRef.once("value").then(function(snap){
     const data=snap.val();
     cajaReady=true;
-    if(cajaBalance>0 || (sales&&sales.length) || (cajaMovements&&cajaMovements.length)){
-      persistCaja();
-    }else if(data && data.ok){
+    if(data && data.ok){
       aplicarCajaNube(data);
     }else{
       persistCaja();
     }
     cajaRef.on("value", function(next){
-      if(ignoreCajaWrite) return;
       const remote=next.val();
       if(remote && remote.ok) aplicarCajaNube(remote);
     });
-  }).catch(function(){});
+  }).catch(function(){
+    cajaReady=true;
+  });
 }
 function iniciarPlantillaNube(){
   if(!firebaseListo()){
