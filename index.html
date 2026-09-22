@@ -38,6 +38,12 @@ a{color:inherit;text-decoration:none}
 .worker .initial{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:#2e1a24;border:1px solid #8a4a66;color:var(--gold2);font-weight:bold}
 .worker h3{margin:14px 0 4px}
 .worker p{margin:0;color:var(--muted);font-size:13px}
+.worker-status{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin:8px 0 0}
+.worker-dot{width:10px;height:10px;border-radius:50%}
+.worker-dot.on{background:#3dcc6e;box-shadow:0 0 10px rgba(61,204,110,.8)}
+.worker-dot.off{background:#6e6670}
+.worker-shift{font-size:12px;color:var(--muted);line-height:1.35}
+.worker-shift.on{color:#9ae6b4}
 .worker-btn{margin-top:14px;width:100%;border:1px solid #8a4a66;background:#24141c;color:var(--gold2);padding:10px;border-radius:8px}
 .notice{padding:14px 16px;border:1px solid #4a2a38;background:#1a1014;border-radius:10px;color:#ead4dc;line-height:1.5}
 .back{border:1px solid var(--line);background:var(--panel);color:#ddd;padding:10px 14px;border-radius:8px}
@@ -987,20 +993,37 @@ function actualizarGestionManager(){
   });
 }
 
+function shiftForWorker(name){
+  return workHistory.find(x=>x.worker===name && !x.out);
+}
+function elapsedText(iso){
+  const ms=Math.max(0, Date.now()-new Date(iso).getTime());
+  const mins=Math.floor(ms/60000);
+  const hh=Math.floor(mins/60);
+  const mm=mins%60;
+  return hh+" h "+String(mm).padStart(2,"0")+" min";
+}
 function renderWorkers(){
   const box = document.getElementById("workers");
   if(!box) return;
 
-  box.innerHTML = workers.map((w,i)=>`
+  box.innerHTML = workers.map((w,i)=>{
+    const shift=shiftForWorker(w.name);
+    const on=!!shift;
+    return `
     <div class="card worker" style="position:relative;">
       <div>
         <div class="initial">${initials(w.name)}</div>
         <h3>${esc(w.name)}</h3>
+        <div class="worker-status">
+          <span class="worker-dot ${on?"on":"off"}" title="${on?"En servicio":"Fuera de servicio"}"></span>
+          <span class="worker-shift ${on?"on":""}">${on?("En servicio · <span data-shift-in=\""+esc(shift.in)+"\">"+elapsedText(shift.in)+"</span>"):"Fuera de servicio"}</span>
+        </div>
         <p>${esc(w.role)}</p>
       </div>
       <button class="worker-btn" onclick="enterWorker(${i})">Entrar a mi panel</button>
-    </div>`).join("");
-
+    </div>`;
+  }).join("");
 }
 
 function enterWorker(i){
@@ -1512,13 +1535,13 @@ function resetWeekHours(){
 function clockIn(){
   if(currentShift()){alert("Ya estás de servicio.");return}
   workHistory.unshift({id:Date.now(),worker:activeWorker,in:new Date().toISOString(),out:null});
-  persistFichaje();renderClock();renderBusinessStats();renderHoursBoard();renderServiceCards();
+  persistFichaje();renderClock();renderBusinessStats();renderHoursBoard();renderServiceCards();renderWorkers();
 }
 function clockOut(){
   const shift=currentShift(); if(!shift)return;
   shift.out=new Date().toISOString();
   shift.hours=(new Date(shift.out)-new Date(shift.in))/3600000;
-  persistFichaje();renderClock();renderBusinessStats();renderHoursBoard();renderServiceCards();
+  persistFichaje();renderClock();renderBusinessStats();renderHoursBoard();renderServiceCards();renderWorkers();
 }
 function fmtDate(iso){return new Date(iso).toLocaleString("es-ES",{dateStyle:"short",timeStyle:"short"})}
 function fmtHora(iso){return new Date(iso).toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"})}
@@ -1788,9 +1811,14 @@ function renderHoursBoard(){
 }
 function renderAll(){
   actualizarGestionManager();
-  renderProducts();renderAgreements();renderPacks();renderClock();renderBusinessStats();renderSalesHistory();renderHoursBoard();renderServiceCards();renderCaja();
+  renderWorkers();renderProducts();renderAgreements();renderPacks();renderClock();renderBusinessStats();renderSalesHistory();renderHoursBoard();renderServiceCards();renderCaja();
 }
 renderWorkers();
+setInterval(function(){
+  document.querySelectorAll("[data-shift-in]").forEach(function(el){
+    el.textContent=elapsedText(el.getAttribute("data-shift-in"));
+  });
+}, 15000);
 renderEmployeeManagement();
 if(activeWorker && workers.some(w=>w.name===activeWorker)){
   document.getElementById("welcome").textContent="Hola, "+activeWorker;
