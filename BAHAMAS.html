@@ -67,16 +67,14 @@ a{color:inherit;text-decoration:none}
 .stat-card small{color:#777;font-size:12px}
 
 .service-board{margin-top:22px}
-.service-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-.service-card{background:#160c12;border:1px solid var(--line);border-radius:12px;padding:16px}
-.service-card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:13px}
-.service-card-head h4{margin:0;color:#fff;font-size:16px}
+.service-cards{display:grid;grid-template-columns:1fr;gap:8px}
+.service-card{background:#160c12;border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.service-card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0}
+.service-card-head h4{margin:0;color:#fff;font-size:14px}
 .service-card-head span{font-size:11px;color:var(--muted)}
-.service-data{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.service-data div{border:1px solid var(--line);border-radius:8px;padding:10px}
-.service-data small{display:block;color:var(--muted);font-size:10px;margin-bottom:5px}
-.service-data strong{font-size:14px;color:var(--gold2)}
-.copy-btn{margin-top:12px;width:100%;background:#2a1820;border:1px solid var(--line);color:#eee;padding:8px 10px;border-radius:7px}
+.service-card .fichaje-resumen{flex:1;margin:0;gap:2px}
+.service-card .fichaje-resumen div{font-size:12px;line-height:1.35}
+.copy-btn{margin:0;width:auto;background:#2a1820;border:1px solid var(--line);color:#eee;padding:6px 10px;border-radius:7px;flex:none}
 .copy-btn:hover{border-color:var(--gold);color:var(--gold2)}
 .hours-board{margin-top:22px}
 .hours-row{display:grid;grid-template-columns:170px 1fr 95px;align-items:center;gap:12px;margin:12px 0}
@@ -377,7 +375,7 @@ td{color:#ddd} tr:last-child td{border-bottom:0}
       <div id="timeHistory"></div>
       <div class="card service-board">
         <h3 style="margin-top:0;color:var(--gold2)">Resumen de servicios</h3>
-        <div style="color:var(--muted);font-size:12px;margin-bottom:14px">Cada empleado ve aquí solo su propio servicio. Alexandra Miller (jefa) y Eduard Graham (encargado) pueden ver los servicios de todos. El botón «Copiar» copia el resumen.</div>
+        <div style="color:var(--muted);font-size:12px;margin-bottom:10px">Cada uno ve su último servicio. Jefa y Encargado ven a todos.</div>
         <div id="serviceCards" class="service-cards"></div>
       </div>
     </div>
@@ -664,6 +662,8 @@ let workHistory = load("bahamas_work_history", []);
 let hoursWeekStart = load("bahamas_hours_week_start", "");
 let sales = load("bahamas_sales", []);
 let salesHistoryOpen=false;
+let cajaHistoryOpen=false;
+let serviceCardsOpen=false;
 let cajaBalance = Number(load("bahamas_caja_balance", 0))||0;
 let cajaMovements = load("bahamas_caja_movements", []);
 let activeWorker = sessionStorage.getItem("bahamas_active_worker") || ""; 
@@ -1868,21 +1868,22 @@ function renderServiceCards(){
   }
   const visibleWorkers=canManage()?workers:workers.filter(w=>w.name===activeWorker);
   const latestByWorker=visibleWorkers.map(w=>finished.find(x=>x.worker===w.name)).filter(Boolean);
-  box.innerHTML=latestByWorker.map(s=>`
+  const limit=serviceCardsOpen?20:4;
+  const shown=latestByWorker.slice(0,limit);
+  box.innerHTML=shown.map(s=>`
     <div class="service-card">
-      <div class="service-card-head">
-        <h4>${esc(s.worker)}</h4>
-        <span>SERVICIO TERMINADO</span>
-      </div>
-      <div class="fichaje-resumen">
-        <div>▪︎ Nombre: <strong>${esc(s.worker)}</strong></div>
-        <div>▪︎ Hora de inicio: <strong>${fmtHora(s.in)}</strong></div>
-        <div>▪︎ Hora de salida: <strong>${fmtHora(s.out)}</strong></div>
-        <div>▪︎ Horas totales: <strong>${hoursText(s.hours)}</strong></div>
-        <div>▪︎ Horas acumuladas: <strong>${hoursText(totalHoursForWorker(s.worker))}</strong></div>
+      <div>
+        <div class="service-card-head"><h4>${esc(s.worker)}</h4></div>
+        <div class="fichaje-resumen">
+          <div>${fmtHora(s.in)} – ${fmtHora(s.out)} · ${hoursText(s.hours)} · acum. ${hoursText(totalHoursForWorker(s.worker))}</div>
+        </div>
       </div>
       <button class="copy-btn" data-copy-id="${s.id}" onclick="copyService(${s.id})">📋 Copiar</button>
-    </div>`).join("");
+    </div>`).join("")+(latestByWorker.length>4?`<button type="button" class="secondary sales-history-more" onclick="toggleServiceCards()">${serviceCardsOpen?"Ver menos":"Ver más"}</button>`:"");
+}
+function toggleServiceCards(){
+  serviceCardsOpen=!serviceCardsOpen;
+  renderServiceCards();
 }
 function renderBusinessStats(){
   const list=visibleSales();
@@ -1939,6 +1940,10 @@ function addCajaMoney(e,tipo){
   renderBusinessStats();
   return false;
 }
+function toggleCajaHistory(){
+  cajaHistoryOpen=!cajaHistoryOpen;
+  renderCaja();
+}
 function renderCaja(){
   const bal=document.getElementById("cajaBalance");
   const hist=document.getElementById("cajaHistory");
@@ -1949,15 +1954,21 @@ function renderCaja(){
     return;
   }
   const label={ingreso:"Añadido",retiro:"Retirado",venta:"Venta"};
-  hist.innerHTML=cajaMovements.length?`<table><thead><tr><th>Fecha</th><th>Tipo</th><th>Cantidad</th><th>Quién</th><th>Concepto</th></tr></thead><tbody>
-  ${cajaMovements.slice(0,80).map(m=>`<tr>
+  if(!cajaMovements.length){
+    hist.innerHTML='<div class="empty">Todavía no hay movimientos.</div>';
+    return;
+  }
+  const limit=cajaHistoryOpen?20:6;
+  const shown=cajaMovements.slice(0,limit);
+  hist.innerHTML=`<div class="sales-history-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Cantidad</th><th>Quién</th></tr></thead><tbody>
+  ${shown.map(m=>`<tr>
     <td>${fmtDate(m.date)}</td>
     <td>${esc(label[m.tipo]||m.tipo)}</td>
     <td><strong>${m.tipo==="retiro"?"- ":""}${money(m.amount)}</strong></td>
     <td>${esc(m.worker||"—")}</td>
-    <td>${esc(m.note||"—")}</td>
   </tr>`).join("")}
-  </tbody></table>`:`<div class="empty">Todavía no hay movimientos.</div>`;
+  </tbody></table></div>
+  ${cajaMovements.length>6?`<button type="button" class="secondary sales-history-more" onclick="toggleCajaHistory()">${cajaHistoryOpen?"Ver menos":"Ver más"}</button>`:""}`;
 }
 function renderHoursBoard(){
   const max=15;
