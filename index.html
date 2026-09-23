@@ -119,6 +119,9 @@ td{color:#ddd} tr:last-child td{border-bottom:0}
 .product{display:flex;justify-content:space-between;align-items:center;gap:15px}
 .product h3{margin:0 0 5px;font-size:16px}.product small{color:var(--muted)}
 .product button{background:#24141c;border:1px solid #8a4a66;color:var(--gold2);padding:9px 12px;border-radius:8px}
+.product-actions{display:flex;flex-direction:column;gap:6px;flex:none}
+.product-edit{display:flex;flex-direction:column;gap:8px;width:100%}
+.product-edit .product-edit-row{display:flex;gap:8px;flex-wrap:wrap}
 .cart{position:sticky;top:90px}
 .cart h3{margin-top:0;color:var(--gold2)}
 .cart-item{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
@@ -665,6 +668,7 @@ let sales = load("bahamas_sales", []);
 let salesHistoryOpen=false;
 let cajaHistoryOpen=false;
 let serviceCardsOpen=false;
+let editingProductId=null;
 let cajaBalance = Number(load("bahamas_caja_balance", 0))||0;
 let cajaMovements = load("bahamas_caja_movements", []);
 let activeWorker = sessionStorage.getItem("bahamas_active_worker") || ""; 
@@ -1138,32 +1142,121 @@ function renderSalesPacks(){
     </div>`).join(""):`<div class="empty" style="grid-column:1/-1">No hay packs disponibles.</div>`;
 }
 function renderProducts(){
-  document.getElementById("productList").innerHTML=products.length?products.map(p=>`
-    <div class="card product">
+  document.getElementById("productList").innerHTML=products.length?products.map(p=>{
+    if(isJefe() && editingProductId===p.id){
+      return `<div class="card product" style="align-items:stretch">
+        <div class="product-edit">
+          <input id="editProductName_${p.id}" value="${esc(p.name)}" placeholder="Nombre">
+          <input id="editProductPrice_${p.id}" type="number" min="0" step="0.01" value="${p.price}" placeholder="Precio $">
+          <input id="editProductImage_${p.id}" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+          <div class="product-edit-row">
+            <button class="primary" type="button" onclick="saveProductEdit(${p.id})">Guardar</button>
+            <button class="secondary" type="button" onclick="cancelEditProduct()">Cancelar</button>
+            <button class="danger" type="button" onclick="deleteProduct(${p.id})">Eliminar</button>
+          </div>
+        </div>
+      </div>`;
+    }
+    return `<div class="card product">
       <div class="product-info">
         ${p.image?`<img class="product-image" src="${p.image}" alt="${esc(p.name)}">`:`<div class="product-no-image">📦</div>`}
         <div><h3>${esc(p.name)}</h3><small>${money(p.price)}</small></div>
       </div>
-      <button onclick="addToCart(${p.id})">Añadir</button>
-    </div>`).join(""):`<div class="empty" style="grid-column:1/-1">No hay productos. Añade uno desde Productos.</div>`;
+      <div class="product-actions">
+        <button onclick="addToCart(${p.id})">Añadir</button>
+        ${isJefe()?`<button class="secondary" type="button" onclick="editProduct(${p.id})">✏️ Editar</button>`:""}
+      </div>
+    </div>`;
+  }).join(""):`<div class="empty" style="grid-column:1/-1">${isJefe()?"No hay productos. Añádelos desde Productos o edita aquí cuando existan.":"No hay productos. Añade uno desde Productos."}</div>`;
   renderSalesPacks();
 
   document.getElementById("productTable").innerHTML=products.length?`
-  <table><thead><tr><th>Producto</th><th>Precio</th>${canManage()?"<th></th>":""}</tr></thead><tbody>
+  <table><thead><tr><th>Producto</th><th>Precio</th>${isJefe()?"<th></th>":""}</tr></thead><tbody>
   ${products.map(p=>`<tr>
     <td><div class="product-info">${p.image?`<img class="product-image" src="${p.image}" alt="${esc(p.name)}">`:`<div class="product-no-image">📦</div>`}<strong>${esc(p.name)}</strong></div></td>
     <td>${money(p.price)}</td>
-    ${canManage()?`<td style="text-align:right"><button class="danger" onclick="deleteProduct(${p.id})">Eliminar</button></td>`:""}
+    ${isJefe()?`<td style="text-align:right;white-space:nowrap"><button class="secondary" type="button" onclick="editProductFromTable(${p.id})">✏️ Editar</button> <button class="danger" onclick="deleteProduct(${p.id})">Eliminar</button></td>`:""}
   </tr>`).join("")}
   </tbody></table>`:`<div class="empty">No hay productos.</div>`;
 
   const productAdmin=document.getElementById("productAdminArea");
-  productAdmin.style.display=canManage()?"block":"none";
-  document.getElementById("productsAccessText").textContent=canManage()?"Puedes añadir y eliminar productos":"Solo consulta · Los productos los gestionan jefes y encargados";
+  productAdmin.style.display=isJefe()?"block":"none";
+  document.getElementById("productsAccessText").textContent=isJefe()?"Puedes añadir, editar y eliminar productos":"Solo consulta · Los productos los gestionan jefes y encargados";
+}
+function editProduct(id){
+  if(!isJefe()){ alert("Solo los jefes y encargados pueden modificar productos."); return; }
+  editingProductId=id;
+  renderProducts();
+}
+function editProductFromTable(id){
+  if(!isJefe()){ alert("Solo los jefes y encargados pueden modificar productos."); return; }
+  editingProductId=id;
+  activateTab("ventas");
+  renderProducts();
+  const el=document.getElementById("editProductName_"+id);
+  if(el) el.scrollIntoView({behavior:"smooth",block:"center"});
+}
+function cancelEditProduct(){
+  editingProductId=null;
+  renderProducts();
+}
+function saveProductEdit(id){
+  if(!isJefe()){ alert("Solo los jefes y encargados pueden modificar productos."); return false; }
+  const p=products.find(x=>x.id===id);
+  if(!p) return false;
+  const name=document.getElementById("editProductName_"+id).value.trim();
+  const price=Number(document.getElementById("editProductPrice_"+id).value);
+  const fileEl=document.getElementById("editProductImage_"+id);
+  const file=fileEl && fileEl.files[0];
+  if(!name){ alert("El nombre no puede estar vacío."); return false; }
+  if(!Number.isFinite(price) || price<0){ alert("Introduce un precio válido."); return false; }
+  const finish=(image)=>{
+    const old={name:p.name,price:p.price,image:p.image};
+    p.name=name;
+    p.price=price;
+    p.image=image;
+    try{
+      persistCatalogo();
+    }catch(err){
+      p.name=old.name; p.price=old.price; p.image=old.image;
+      alert("La imagen es demasiado grande. Elige una imagen más pequeña.");
+      return;
+    }
+    editingProductId=null;
+    renderAll();
+  };
+  if(!file){
+    finish(p.image||"");
+    return false;
+  }
+  if(!file.type.startsWith("image/")){
+    alert("Selecciona una imagen válida.");
+    return false;
+  }
+  const reader=new FileReader();
+  reader.onload=()=>{
+    const img=new Image();
+    img.onload=()=>{
+      const max=700;
+      let w=img.width, h=img.height;
+      if(w>max || h>max){
+        const scale=Math.min(max/w,max/h);
+        w=Math.round(w*scale); h=Math.round(h*scale);
+      }
+      const canvas=document.createElement("canvas");
+      canvas.width=w; canvas.height=h;
+      canvas.getContext("2d").drawImage(img,0,0,w,h);
+      finish(canvas.toDataURL("image/jpeg",0.78));
+    };
+    img.onerror=()=>alert("No se ha podido cargar esa imagen.");
+    img.src=reader.result;
+  };
+  reader.onerror=()=>alert("No se ha podido leer la imagen.");
+  reader.readAsDataURL(file);
+  return false;
 }
 function addProduct(e){
-  if(!canManage()){ alert("Solo la Jefa y el Encargado pueden gestionar productos y precios."); return false; }
-  if(!canManage()){alert("Solo los jefes y encargados pueden añadir productos.");return}
+  if(!isJefe()){ alert("Solo los jefes y encargados pueden gestionar productos y precios."); return false; }
   e.preventDefault();
 
   const name=document.getElementById("productName").value.trim();
@@ -1220,9 +1313,9 @@ function addProduct(e){
   reader.readAsDataURL(file);
 }
 function deleteProduct(id){
-  if(!canManage()){ alert("Solo la Jefa y el Encargado pueden eliminar productos."); return false; }
-  if(!canManage()){alert("Solo los jefes y encargados pueden eliminar productos.");return}
-  products=products.filter(p=>p.id!==id); cart=cart.filter(x=>x.type!=="pack" && x.productId!==id); persistCatalogo(); renderAll();
+  if(!isJefe()){ alert("Solo los jefes y encargados pueden eliminar productos."); return false; }
+  if(!confirm("¿Eliminar este producto?")) return;
+  products=products.filter(p=>p.id!==id); cart=cart.filter(x=>x.type!=="pack" && x.productId!==id); editingProductId=null; persistCatalogo(); renderAll();
 }
 function addToCart(id){
   const p=products.find(x=>x.id===id); if(!p)return;
