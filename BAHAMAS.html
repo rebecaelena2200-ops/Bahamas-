@@ -349,7 +349,7 @@ td{color:#ddd} tr:last-child td{border-bottom:0}
     <div id="fichaje" class="subview">
       <div class="section-title"><h2>Fichaje</h2><span>Entrada y salida de servicio</span></div>
       <div class="hours-reset-bar" data-manager-only>
-        <span>Cada domingo las horas de todos vuelven a 0 y se empieza la semana de nuevo. Jefa y Encargado también pueden pulsar el botón.</span>
+        <span>Las horas no se reinician solas. Solo vuelven a 0 cuando Jefa o Encargado pulsan este botón.</span>
         <button type="button" class="primary" onclick="resetWeekHours()">Reiniciar horas (domingo)</button>
       </div>
       <div class="clock-grid">
@@ -881,15 +881,12 @@ function iniciarFichajeNube(){
       });
     }
     fichajeReady=true;
-    maybeAutoSundayReset();
     fichajeRef.on("value", function(next){
       if(ignoreFichajeWrite) return;
       const remote=next.val();
       if(remote && remote.ok) aplicarFichajeNube(remote);
     });
-  }).catch(function(){
-    maybeAutoSundayReset();
-  });
+  }).catch(function(){});
 }
 function aplicarCajaNube(data){
   if(!data) return;
@@ -1753,26 +1750,12 @@ function deletePack(id){
 function currentShift(){
   return workHistory.find(x=>x.worker===activeWorker && !x.out);
 }
-function thisSundayIso(){
-  const d=new Date();
-  d.setHours(0,0,0,0);
-  d.setDate(d.getDate()-d.getDay());
-  return d.toISOString();
-}
-function maybeAutoSundayReset(){
-  const sunday=thisSundayIso();
-  if(!hoursWeekStart || new Date(hoursWeekStart).getTime()<new Date(sunday).getTime()){
-    hoursWeekStart=sunday;
-    persistFichaje();
-    if(typeof renderAll==="function") renderAll();
-  }
-}
 function resetWeekHours(){
   if(!canManage()){
     alert("Solo la Jefa y el Encargado pueden reiniciar las horas.");
     return;
   }
-  if(!confirm("¿Reiniciar las horas de todos y empezar de 0? Es el mismo corte que se hace cada domingo.")) return;
+  if(!confirm("¿Reiniciar las horas de todos y empezar de 0?")) return;
   hoursWeekStart=new Date().toISOString();
   persistFichaje();
   renderAll();
@@ -2112,7 +2095,6 @@ if(activeWorker && workers.some(w=>w.name===activeWorker)){
   sessionStorage.removeItem("bahamas_active_worker");
 }
 renderAll();
-maybeAutoSundayReset();
 iniciarPlantillaNube();
 
 document.getElementById("loginPin").addEventListener("keydown",e=>{
