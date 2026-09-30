@@ -281,13 +281,12 @@ td{color:#ddd} tr:last-child td{border-bottom:0}
           </div>
         </aside>
       </div>
-    </div>
-
-
     <div id="salesHistory" class="card" style="margin-top:22px">
       <h3 id="salesHistoryTitle" style="margin-top:0;color:var(--gold2)">Historial de ventas</h3>
       <div id="salesHistoryTable"></div>
     </div>
+    </div>
+
 
     <div id="convenios" class="subview">
       <div class="section-title"><h2>Convenios</h2><span id="agreementsAccessText">Descuentos para clientes</span></div>
@@ -406,16 +405,13 @@ td{color:#ddd} tr:last-child td{border-bottom:0}
     </div>
 
     <div id="iban" class="subview">
-      <div class="section-title"><h2>IBAN</h2><span>Solo jefes y encargados pueden ver y añadir cuentas</span></div>
-      <div class="card" style="margin-bottom:18px">
-        <form class="form two" onsubmit="return addIban(event)">
-          <input id="ibanName" placeholder="Titular o banco" required>
-          <input id="ibanNumber" placeholder="6 dígitos" required autocomplete="off" inputmode="numeric" maxlength="6">
-          <button class="primary" type="submit">Añadir IBAN</button>
-        </form>
-      </div>
+      <div class="section-title"><h2>IBAN</h2><span>Solo jefes y encargados</span></div>
       <div class="card">
-        <h3 style="margin-top:0;color:var(--gold2)">Cuentas guardadas</h3>
+        <form class="form two" onsubmit="return addIban(event)" style="margin-bottom:12px">
+          <input id="ibanName" placeholder="Titular" required>
+          <input id="ibanNumber" placeholder="IBAN" required autocomplete="off">
+          <button class="primary" type="submit">Añadir</button>
+        </form>
         <div id="ibanList"></div>
       </div>
     </div>
@@ -686,6 +682,7 @@ let cajaHistoryOpen=false;
 let serviceCardsOpen=false;
 let editingProductId=null;
 let ibans = load("bahamas_ibans", []);
+let ibanListOpen=false;
 let cajaBalance = Number(load("bahamas_caja_balance", 0))||0;
 let cajaMovements = load("bahamas_caja_movements", []);
 let activeWorker = sessionStorage.getItem("bahamas_active_worker") || ""; 
@@ -2110,10 +2107,10 @@ function renderCaja(){
   ${cajaMovements.length>6?`<button type="button" class="secondary sales-history-more" onclick="toggleCajaHistory()">${cajaHistoryOpen?"Ver menos":"Ver más"}</button>`:""}`;
 }
 function cleanIban(s){
-  return String(s||"").replace(/\D/g,"").slice(0,6);
+  return String(s||"").replace(/\s+/g,"").toUpperCase();
 }
 function prettyIban(s){
-  return cleanIban(s);
+  return String(s||"").trim();
 }
 function addIban(e){
   if(e) e.preventDefault();
@@ -2122,16 +2119,17 @@ function addIban(e){
     return false;
   }
   const name=document.getElementById("ibanName").value.trim();
-  const number=cleanIban(document.getElementById("ibanNumber").value);
-  if(!name || number.length!==6){
-    alert("El IBAN tiene que tener 6 dígitos.");
+  const raw=document.getElementById("ibanNumber").value.trim();
+  const number=cleanIban(raw);
+  if(!name || !number){
+    alert("Pon el titular y el IBAN.");
     return false;
   }
   if(ibans.some(x=>cleanIban(x.number)===number)){
     alert("Ese IBAN ya está guardado.");
     return false;
   }
-  ibans.unshift({id:Date.now(),name:name,number:number,worker:activeWorker,date:new Date().toISOString()});
+  ibans.unshift({id:Date.now(),name:name,number:raw,worker:activeWorker,date:new Date().toISOString()});
   persistIban();
   document.getElementById("ibanName").value="";
   document.getElementById("ibanNumber").value="";
@@ -2151,8 +2149,11 @@ function copyIban(id){
   if(!isJefe()) return;
   const item=ibans.find(x=>x.id===id);
   if(!item) return;
-  const text=item.name+"\n"+prettyIban(item.number);
-  copyPlainText(text);
+  copyPlainText(item.name+"\n"+prettyIban(item.number));
+}
+function toggleIbanList(){
+  ibanListOpen=!ibanListOpen;
+  renderIban();
 }
 function renderIban(){
   const box=document.getElementById("ibanList");
@@ -2162,19 +2163,22 @@ function renderIban(){
     return;
   }
   if(!ibans.length){
-    box.innerHTML='<div class="empty">Todavía no hay IBAN guardados.</div>';
+    box.innerHTML='<div class="empty">Todavía no hay IBAN.</div>';
     return;
   }
-  box.innerHTML=`<table><thead><tr><th>Titular</th><th>IBAN</th><th></th></tr></thead><tbody>
-  ${ibans.map(x=>`<tr>
-    <td><strong>${esc(x.name)}</strong></td>
-    <td style="letter-spacing:.5px">${esc(prettyIban(x.number))}</td>
+  const limit=ibanListOpen?30:6;
+  const shown=ibans.slice(0,limit);
+  box.innerHTML=`<div class="sales-history-wrap"><table><thead><tr><th>Titular</th><th>IBAN</th><th></th></tr></thead><tbody>
+  ${shown.map(x=>`<tr>
+    <td>${esc(x.name)}</td>
+    <td>${esc(prettyIban(x.number))}</td>
     <td style="text-align:right;white-space:nowrap">
       <button class="secondary" type="button" onclick="copyIban(${x.id})">Copiar</button>
       <button class="danger" type="button" onclick="deleteIban(${x.id})">Eliminar</button>
     </td>
   </tr>`).join("")}
-  </tbody></table>`;
+  </tbody></table></div>
+  ${ibans.length>6?`<button type="button" class="secondary sales-history-more" onclick="toggleIbanList()">${ibanListOpen?"Ver menos":"Ver más"}</button>`:""}`;
 }
 function renderHoursBoard(){
   const max=15;
