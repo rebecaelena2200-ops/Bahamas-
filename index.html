@@ -253,6 +253,7 @@ td{color:#ddd} tr:last-child td{border-bottom:0}
       <button class="tab" data-tab="packs">PACKS</button>
       <button class="tab" data-tab="fichaje">FICHAJE</button>
       <button class="tab" data-tab="caja" data-jefe-only style="display:none">CAJA</button>
+      <button class="tab" data-tab="iban" data-jefe-only style="display:none">IBAN</button>
     </div>
 
     <div id="ventas" class="subview active">
@@ -401,6 +402,21 @@ td{color:#ddd} tr:last-child td{border-bottom:0}
       <div class="card">
         <h3 style="margin-top:0;color:var(--gold2)">Movimientos</h3>
         <div id="cajaHistory"></div>
+      </div>
+    </div>
+
+    <div id="iban" class="subview">
+      <div class="section-title"><h2>IBAN</h2><span>Solo jefes y encargados pueden ver y añadir cuentas</span></div>
+      <div class="card" style="margin-bottom:18px">
+        <form class="form two" onsubmit="return addIban(event)">
+          <input id="ibanName" placeholder="Titular o banco" required>
+          <input id="ibanNumber" placeholder="IBAN (ES…)" required autocomplete="off">
+          <button class="primary" type="submit">Añadir IBAN</button>
+        </form>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;color:var(--gold2)">Cuentas guardadas</h3>
+        <div id="ibanList"></div>
       </div>
     </div>
   </section>
@@ -669,6 +685,7 @@ let salesHistoryOpen=false;
 let cajaHistoryOpen=false;
 let serviceCardsOpen=false;
 let editingProductId=null;
+let ibans = load("bahamas_ibans", []);
 let cajaBalance = Number(load("bahamas_caja_balance", 0))||0;
 let cajaMovements = load("bahamas_caja_movements", []);
 let activeWorker = sessionStorage.getItem("bahamas_active_worker") || ""; 
@@ -762,14 +779,17 @@ let plantillaRef=null;
 let catalogoRef=null;
 let fichajeRef=null;
 let cajaRef=null;
+let ibanRef=null;
 let cloudReady=false;
 let catalogoReady=false;
 let fichajeReady=false;
 let cajaReady=false;
+let ibanReady=false;
 let ignoreCloudWrite=false;
 let ignoreCatalogoWrite=false;
 let ignoreFichajeWrite=false;
 let ignoreCajaWrite=false;
+let ignoreIbanWrite=false;
 function aplicarPlantillaNube(data){
   const lista=normalizarTrabajadores(data && data.workers);
   if(!lista.length) return;
@@ -939,6 +959,43 @@ function iniciarCajaNube(){
     cajaReady=true;
   });
 }
+function persistIban(){
+  save("bahamas_ibans", ibans);
+  if(!ibanRef || !ibanReady) return;
+  ignoreIbanWrite=true;
+  ibanRef.set({
+    items: ibans,
+    ok: true,
+    updatedAt: Date.now()
+  }).finally(function(){
+    setTimeout(function(){ ignoreIbanWrite=false; }, 500);
+  });
+}
+function aplicarIbanNube(data){
+  if(!data) return;
+  ibans=normalizarLista(data.items);
+  save("bahamas_ibans", ibans);
+  if(typeof renderIban==="function") renderIban();
+}
+function iniciarIbanNube(){
+  if(!ibanRef) return;
+  ibanRef.once("value").then(function(snap){
+    const data=snap.val();
+    ibanReady=true;
+    if(data && data.ok){
+      aplicarIbanNube(data);
+    }else{
+      persistIban();
+    }
+    ibanRef.on("value", function(next){
+      if(ignoreIbanWrite) return;
+      const remote=next.val();
+      if(remote && remote.ok) aplicarIbanNube(remote);
+    });
+  }).catch(function(){
+    ibanReady=true;
+  });
+}
 function iniciarPlantillaNube(){
   if(!firebaseListo()){
     setCloudStatus("La plantilla todavía no está compartida. Hay que conectar Firebase para que todos vean los mismos empleados.");
@@ -954,9 +1011,11 @@ function iniciarPlantillaNube(){
     catalogoRef=firebase.database().ref("bahamas/catalogo");
     fichajeRef=firebase.database().ref("bahamas/fichaje");
     cajaRef=firebase.database().ref("bahamas/caja");
+    ibanRef=firebase.database().ref("bahamas/iban");
     iniciarCatalogoNube();
     iniciarFichajeNube();
     iniciarCajaNube();
+    iniciarIbanNube();
   }catch(err){
     setCloudStatus("Firebase no se ha podido conectar. Revisa apiKey y databaseURL.");
     return;
@@ -1106,10 +1165,12 @@ document.querySelectorAll(".tab").forEach(btn=>{
 function activateTab(id){
   if(!activeWorker)return;
   if(id==="caja" && !isJefe()) return;
+  if(id==="iban" && !isJefe()) return;
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===id));
   document.querySelectorAll(".subview").forEach(v=>v.classList.toggle("active",v.id===id));
   if(id==="fichaje") renderClock();
   if(id==="caja") renderCaja();
+  if(id==="iban") renderIban();
 }
 
 function cartItemData(x){
@@ -2048,6 +2109,73 @@ function renderCaja(){
   </tbody></table></div>
   ${cajaMovements.length>6?`<button type="button" class="secondary sales-history-more" onclick="toggleCajaHistory()">${cajaHistoryOpen?"Ver menos":"Ver más"}</button>`:""}`;
 }
+function cleanIban(s){
+  return String(s||"").replace(/[^a-zA-Z0-9]/g,"").toUpperCase();
+}
+function prettyIban(s){
+  return cleanIban(s).replace(/(.{4})/g,"$1 ").trim();
+}
+function addIban(e){
+  if(e) e.preventDefault();
+  if(!isJefe()){
+    alert("Solo los jefes y encargados pueden añadir IBAN.");
+    return false;
+  }
+  const name=document.getElementById("ibanName").value.trim();
+  const number=cleanIban(document.getElementById("ibanNumber").value);
+  if(!name || number.length<15){
+    alert("Pon el titular y un IBAN válido.");
+    return false;
+  }
+  if(ibans.some(x=>cleanIban(x.number)===number)){
+    alert("Ese IBAN ya está guardado.");
+    return false;
+  }
+  ibans.unshift({id:Date.now(),name:name,number:number,worker:activeWorker,date:new Date().toISOString()});
+  persistIban();
+  document.getElementById("ibanName").value="";
+  document.getElementById("ibanNumber").value="";
+  renderIban();
+  return false;
+}
+function deleteIban(id){
+  if(!isJefe()){
+    alert("Solo los jefes y encargados pueden eliminar IBAN.");
+    return;
+  }
+  ibans=ibans.filter(x=>x.id!==id);
+  persistIban();
+  renderIban();
+}
+function copyIban(id){
+  if(!isJefe()) return;
+  const item=ibans.find(x=>x.id===id);
+  if(!item) return;
+  const text=item.name+"\n"+prettyIban(item.number);
+  copyPlainText(text);
+}
+function renderIban(){
+  const box=document.getElementById("ibanList");
+  if(!box) return;
+  if(!isJefe()){
+    box.innerHTML='<div class="empty">Solo los jefes y encargados pueden ver los IBAN.</div>';
+    return;
+  }
+  if(!ibans.length){
+    box.innerHTML='<div class="empty">Todavía no hay IBAN guardados.</div>';
+    return;
+  }
+  box.innerHTML=`<table><thead><tr><th>Titular</th><th>IBAN</th><th></th></tr></thead><tbody>
+  ${ibans.map(x=>`<tr>
+    <td><strong>${esc(x.name)}</strong></td>
+    <td style="letter-spacing:.5px">${esc(prettyIban(x.number))}</td>
+    <td style="text-align:right;white-space:nowrap">
+      <button class="secondary" type="button" onclick="copyIban(${x.id})">Copiar</button>
+      <button class="danger" type="button" onclick="deleteIban(${x.id})">Eliminar</button>
+    </td>
+  </tr>`).join("")}
+  </tbody></table>`;
+}
 function renderHoursBoard(){
   const max=15;
   const visibleWorkers=canManage()?workers:workers.filter(w=>w.name===activeWorker);
@@ -2079,7 +2207,7 @@ function renderHoursBoard(){
 }
 function renderAll(){
   actualizarGestionManager();
-  renderWorkers();renderProducts();renderAgreements();renderPacks();renderClock();renderBusinessStats();renderSalesHistory();renderHoursBoard();renderServiceCards();renderCaja();
+  renderWorkers();renderProducts();renderAgreements();renderPacks();renderClock();renderBusinessStats();renderSalesHistory();renderHoursBoard();renderServiceCards();renderCaja();renderIban();
 }
 renderWorkers();
 setInterval(function(){
