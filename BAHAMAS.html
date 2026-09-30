@@ -409,7 +409,7 @@ td{color:#ddd} tr:last-child td{border-bottom:0}
       <div class="card" style="margin-bottom:18px">
         <form class="form two" onsubmit="return addIban(event)">
           <input id="ibanName" placeholder="Titular o banco" required>
-          <input id="ibanNumber" placeholder="IBAN (ES…)" required autocomplete="off">
+          <input id="ibanNumber" placeholder="6 dígitos" required autocomplete="off" inputmode="numeric" maxlength="6">
           <button class="primary" type="submit">Añadir IBAN</button>
         </form>
       </div>
@@ -2108,10 +2108,10 @@ function renderCaja(){
   ${cajaMovements.length>6?`<button type="button" class="secondary sales-history-more" onclick="toggleCajaHistory()">${cajaHistoryOpen?"Ver menos":"Ver más"}</button>`:""}`;
 }
 function cleanIban(s){
-  return String(s||"").replace(/[^a-zA-Z0-9]/g,"").toUpperCase();
+  return String(s||"").replace(/\D/g,"").slice(0,6);
 }
 function prettyIban(s){
-  return cleanIban(s).replace(/(.{4})/g,"$1 ").trim();
+  return cleanIban(s);
 }
 function addIban(e){
   if(e) e.preventDefault();
@@ -2121,8 +2121,8 @@ function addIban(e){
   }
   const name=document.getElementById("ibanName").value.trim();
   const number=cleanIban(document.getElementById("ibanNumber").value);
-  if(!name || number.length<15){
-    alert("Pon el titular y un IBAN válido.");
+  if(!name || number.length!==6){
+    alert("El IBAN tiene que tener 6 dígitos.");
     return false;
   }
   if(ibans.some(x=>cleanIban(x.number)===number)){
