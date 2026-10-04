@@ -675,6 +675,10 @@ let agreements = load("bahamas_agreements", defaultAgreements);
 let packs = load("bahamas_packs", defaultPacks);
 let workHistory = load("bahamas_work_history", []);
 let hoursWeekStart = load("bahamas_hours_week_start", "");
+if(localStorage.getItem("bahamas_hours_manual_v1") !== "ok"){
+  hoursWeekStart = "";
+  try{ localStorage.setItem("bahamas_hours_week_start", JSON.stringify("")); }catch(e){}
+}
 let sales = load("bahamas_sales", []);
 let salesHistoryOpen=false;
 let cajaHistoryOpen=false;
@@ -774,6 +778,7 @@ function normalizarTrabajadores(lista){
 let plantillaRef=null;
 let catalogoRef=null;
 let fichajeRef=null;
+let fichajeCorteRef=null;
 let cajaRef=null;
 let ibanRef=null;
 let cloudReady=false;
@@ -866,9 +871,7 @@ function iniciarCatalogoNube(){
 function aplicarFichajeNube(data){
   if(!data) return;
   workHistory=normalizarLista(data.history);
-  hoursWeekStart=typeof data.weekStart==="string"?data.weekStart:hoursWeekStart;
   save("bahamas_work_history", workHistory);
-  save("bahamas_hours_week_start", hoursWeekStart);
   if(typeof renderAll==="function") renderAll();
 }
 function syncFichajeToCloud(){
@@ -904,6 +907,20 @@ function iniciarFichajeNube(){
       if(remote && remote.ok) aplicarFichajeNube(remote);
     });
   }).catch(function(){});
+}
+function aplicarFichajeCorteNube(data){
+  if(!data || !data.ok || !data.at) return;
+  hoursWeekStart=data.at;
+  save("bahamas_hours_week_start", hoursWeekStart);
+  try{ localStorage.setItem("bahamas_hours_manual_v1", "ok"); }catch(e){}
+  if(typeof renderAll==="function") renderAll();
+}
+function iniciarFichajeCorteNube(){
+  if(!fichajeCorteRef) return;
+  fichajeCorteRef.on("value", function(snap){
+    const data=snap.val();
+    if(data && data.ok) aplicarFichajeCorteNube(data);
+  });
 }
 function aplicarCajaNube(data){
   if(!data) return;
@@ -1006,10 +1023,12 @@ function iniciarPlantillaNube(){
     plantillaRef=firebase.database().ref("bahamas/plantilla");
     catalogoRef=firebase.database().ref("bahamas/catalogo");
     fichajeRef=firebase.database().ref("bahamas/fichaje");
+    fichajeCorteRef=firebase.database().ref("bahamas/fichajeCorte");
     cajaRef=firebase.database().ref("bahamas/caja");
     ibanRef=firebase.database().ref("bahamas/iban");
     iniciarCatalogoNube();
     iniciarFichajeNube();
+    iniciarFichajeCorteNube();
     iniciarCajaNube();
     iniciarIbanNube();
   }catch(err){
@@ -1815,7 +1834,17 @@ function resetWeekHours(){
   }
   if(!confirm("¿Reiniciar las horas de todos y empezar de 0?")) return;
   hoursWeekStart=new Date().toISOString();
+  save("bahamas_hours_week_start", hoursWeekStart);
+  try{ localStorage.setItem("bahamas_hours_manual_v1", "ok"); }catch(e){}
   persistFichaje();
+  if(fichajeCorteRef){
+    fichajeCorteRef.set({
+      ok: true,
+      at: hoursWeekStart,
+      by: activeWorker||"",
+      updatedAt: Date.now()
+    });
+  }
   renderAll();
   alert("Horas reiniciadas. Esta semana se empieza de 0.");
 }
