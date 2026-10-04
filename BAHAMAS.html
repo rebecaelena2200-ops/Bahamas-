@@ -1900,8 +1900,19 @@ function bonusForHours(h){
   if(h>=8) return 2000;
   return 0;
 }
+function startOfWeekMonday(){
+  const d=new Date();
+  d.setHours(0,0,0,0);
+  const day=d.getDay();
+  d.setDate(d.getDate()-(day===0?6:day-1));
+  return d.getTime();
+}
 function totalHoursForWorker(name){
-  const start=hoursWeekStart?new Date(hoursWeekStart).getTime():0;
+  let start=startOfWeekMonday();
+  if(localStorage.getItem("bahamas_hours_manual_v1")==="ok" && hoursWeekStart){
+    const cut=new Date(hoursWeekStart).getTime();
+    if(!isNaN(cut) && cut>start) start=cut;
+  }
   return workHistory.filter(x=>x.worker===name && x.out && new Date(x.in).getTime()>=start).reduce((s,x)=>s+(Number(x.hours)||0),0);
 }
 
@@ -2230,7 +2241,7 @@ function renderHoursBoard(){
     board.id="hoursBoard";
     board.className="card hours-board";
     board.innerHTML=`<h3 style="margin-top:0;color:var(--gold2)">Horas de los empleados</h3>
-      <div style="color:var(--muted);font-size:12px;margin-bottom:12px">La barra llega al 100% al alcanzar 15 horas. Prima: 2.000 $ desde 8 h · 4.000 $ desde 15 h. Cada domingo las horas vuelven a 0. Los jefes y el encargado pueden ver las horas de todos.</div>
+      <div style="color:var(--muted);font-size:12px;margin-bottom:12px">Se calculan con las entradas y salidas de esta semana (desde el lunes). Los fichajes no se borran. La barra llega al 100% a las 15 h. Prima: 2.000 $ desde 8 h · 4.000 $ desde 15 h. Jefa y Encargado ven a todos.</div>
       <div id="hoursRows"></div>`;
     container.appendChild(board);
   }
