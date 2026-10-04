@@ -877,9 +877,8 @@ function aplicarFichajeNube(data){
 function syncFichajeToCloud(){
   if(!fichajeRef || !fichajeReady) return;
   ignoreFichajeWrite=true;
-  fichajeRef.set({
+  fichajeRef.update({
     history: workHistory,
-    weekStart: hoursWeekStart||"",
     ok: true,
     updatedAt: Date.now()
   }).finally(function(){
@@ -895,7 +894,6 @@ function iniciarFichajeNube(){
     }else{
       fichajeRef.set({
         history: workHistory,
-        weekStart: hoursWeekStart||"",
         ok: true,
         updatedAt: Date.now()
       });
@@ -1900,28 +1898,13 @@ function bonusForHours(h){
   if(h>=8) return 2000;
   return 0;
 }
-function startOfWeekMonday(){
-  const d=new Date();
-  d.setHours(0,0,0,0);
-  const day=d.getDay();
-  d.setDate(d.getDate()-(day===0?6:day-1));
-  return d.getTime();
-}
-function endOfWeekMonday(){
-  const d=new Date(startOfWeekMonday());
-  d.setDate(d.getDate()+7);
-  return d.getTime();
-}
-function weekRangeText(){
-  const a=new Date(startOfWeekMonday());
-  const b=new Date(endOfWeekMonday()-1);
-  const fmt=d=>d.toLocaleDateString("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
-  return fmt(a)+" – "+fmt(b);
-}
 function totalHoursForWorker(name){
-  const start=startOfWeekMonday();
-  const end=endOfWeekMonday();
-  return workHistory.filter(x=>x.worker===name && x.out && new Date(x.in).getTime()>=start && new Date(x.in).getTime()<end).reduce((s,x)=>s+(Number(x.hours)||0),0);
+  let start=0;
+  if(localStorage.getItem("bahamas_hours_manual_v1")==="ok" && hoursWeekStart){
+    const cut=new Date(hoursWeekStart).getTime();
+    if(!isNaN(cut)) start=cut;
+  }
+  return workHistory.filter(x=>x.worker===name && x.out && new Date(x.in).getTime()>=start).reduce((s,x)=>s+(Number(x.hours)||0),0);
 }
 
 function visibleSales(){
@@ -2254,7 +2237,7 @@ function renderHoursBoard(){
     container.appendChild(board);
   }
   const note=document.getElementById("hoursBoardNote");
-  if(note) note.textContent="Semana "+weekRangeText()+" · Se suman las entradas y salidas de ese periodo. Los fichajes no se borran. Prima: 2.000 $ desde 8 h · 4.000 $ desde 15 h.";
+  if(note) note.textContent="Las horas se acumulan con las entradas y salidas. No se cortan al cambiar de semana ni el domingo. Solo vuelven a 0 si Jefa, Jefe o Encargado pulsan Reiniciar horas. Prima: 2.000 $ desde 8 h · 4.000 $ desde 15 h.";
   document.getElementById("hoursRows").innerHTML=rows;
 }
 function renderAll(){
