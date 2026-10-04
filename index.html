@@ -684,6 +684,7 @@ let sales = load("bahamas_sales", []);
 let salesHistoryOpen=false;
 let cajaHistoryOpen=false;
 let serviceCardsOpen=false;
+let timeHistoryOpen=false;
 let editingProductId=null;
 let ibans = load("bahamas_ibans", []);
 let ibanListOpen=false;
@@ -1888,9 +1889,22 @@ function renderClock(){
   }
 
   const mine=workHistory.filter(x=>x.worker===activeWorker);
-  document.getElementById("timeHistory").innerHTML=mine.length?`<table><thead><tr><th>Nombre</th><th>Entrada</th><th>Salida</th><th>Horas trabajadas</th></tr></thead><tbody>
-  ${mine.map(x=>`<tr><td>${esc(activeWorker)}</td><td>${fmtDate(x.in)}</td><td>${x.out?fmtDate(x.out):'<span style="color:var(--gold2)">En servicio</span>'}</td><td>${x.out?hoursText(x.hours):"—"}</td></tr>`).join("")}
-  </tbody></table>`:`<div class="empty">No hay fichajes todavía.</div>`;
+  const box=document.getElementById("timeHistory");
+  if(!box) return;
+  if(!mine.length){
+    box.innerHTML='<div class="empty">No hay fichajes todavía.</div>';
+    return;
+  }
+  const limit=timeHistoryOpen?20:5;
+  const shown=mine.slice(0,limit);
+  box.innerHTML=`<div class="sales-history-wrap"><table><thead><tr><th>Entrada</th><th>Salida</th><th>Horas</th></tr></thead><tbody>
+  ${shown.map(x=>`<tr><td>${fmtDate(x.in)}</td><td>${x.out?fmtDate(x.out):'<span style="color:var(--gold2)">En servicio</span>'}</td><td>${x.out?hoursText(x.hours):"—"}</td></tr>`).join("")}
+  </tbody></table></div>
+  ${mine.length>5?`<button type="button" class="secondary sales-history-more" onclick="toggleTimeHistory()">${timeHistoryOpen?"Ver menos":"Ver más"}</button>`:""}`;
+}
+function toggleTimeHistory(){
+  timeHistoryOpen=!timeHistoryOpen;
+  renderClock();
 }
 
 
