@@ -1414,12 +1414,16 @@ function renderCart(){
   }).join("");
   const subtotal=cartSubtotal();
   const a=agreements.find(x=>x.id==document.getElementById("saleAgreement").value);
-  const discount=a?subtotal*Number(a.discount)/100:0;
+  const usable=agreementUsable(a);
+  const discount=usable?subtotal*Number(a.discount)/100:0;
+  if(a && !usable){
+    document.getElementById("saleAgreement").value="";
+  }
   const preview=document.getElementById("saleAgreementPreview");
   const previewImg=document.getElementById("saleAgreementImg");
   const previewCap=document.getElementById("saleAgreementCaption");
   if(preview){
-    if(a && a.image){
+    if(a && a.image && usable){
       preview.style.display="flex";
       if(previewImg){ previewImg.src=a.image; previewImg.alt=a.name; }
       if(previewCap) previewCap.textContent=a.name+" · "+a.discount+"%";
@@ -1443,6 +1447,12 @@ function finishSale(){
   if(!cart.length){alert("Añade al menos un producto o un pack.");return}
   const subtotal=cartSubtotal();
   const agreement=agreements.find(x=>x.id==document.getElementById("saleAgreement").value);
+  if(agreement && agreementIsExpired(agreement)){
+    alert("Este convenio está caducado. No se puede usar en la venta. Elige otro o déjalo sin convenio.");
+    document.getElementById("saleAgreement").value="";
+    renderCart();
+    return;
+  }
   const discount=agreement?subtotal*Number(agreement.discount)/100:0;
   const total=subtotal-discount;
   sales.unshift({
@@ -1471,10 +1481,17 @@ function daysUntilDate(dateStr){
   n.setHours(0,0,0,0);
   return Math.round((t.getTime()-n.getTime())/86400000);
 }
+function agreementIsExpired(a){
+  const d=daysUntilDate(a && a.renewUntil);
+  return d!==null && d<0;
+}
+function agreementUsable(a){
+  return !!a && !agreementIsExpired(a);
+}
 function agreementRenewLabel(a){
   const d=daysUntilDate(a && a.renewUntil);
   if(d===null) return "Sin fecha de renovación";
-  if(d<0) return "Caducado · hay que renovar";
+  if(d<0) return "Caducado · no se puede usar en ventas";
   if(d===0) return "Caduca hoy · hay que renovar";
   if(d<=14) return "Renovar en "+d+" día"+(d===1?"":"s");
   return "Válido hasta "+fmtDay(a.renewUntil);
@@ -1528,7 +1545,7 @@ function renewAgreement(id){
 }
 function renderAgreements(){
   const sel=document.getElementById("saleAgreement");
-  sel.innerHTML='<option value="">Sin convenio</option>'+agreements.map(a=>`<option value="${a.id}">${esc(a.name)} · ${a.discount}%</option>`).join("");
+  sel.innerHTML='<option value="">Sin convenio</option>'+agreements.filter(agreementUsable).map(a=>`<option value="${a.id}">${esc(a.name)} · ${a.discount}%</option>`).join("");
   document.getElementById("agreementTable").innerHTML=agreements.length?`
   <table><thead><tr><th>Convenio</th><th>Descuento</th><th>Renovación</th>${canManage()?"<th></th>":""}</tr></thead><tbody>
   ${agreements.map(a=>`<tr>
